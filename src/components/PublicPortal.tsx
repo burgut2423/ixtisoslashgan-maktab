@@ -49,6 +49,7 @@ import {
   PORTAL_THEMES,
   type ThemeId,
 } from '../utils/themes';
+import { getPrimaryMediaUrl, parseMediaUrls } from '../utils/mediaHelpers';
 
 interface PublicPortalProps {
   configured: boolean;
@@ -89,6 +90,12 @@ export function PublicPortal({
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [customLightbox, setCustomLightbox] = useState<{
     url: string;
+    title: string;
+    subtitle?: string;
+  } | null>(null);
+  const [articleLightbox, setArticleLightbox] = useState<{
+    images: string[];
+    index: number;
     title: string;
     subtitle?: string;
   } | null>(null);
@@ -202,10 +209,35 @@ export function PublicPortal({
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        if (articleLightbox) {
+          setArticleLightbox(null);
+          return;
+        }
+        if (lightboxIndex !== null || customLightbox) {
+          setLightboxIndex(null);
+          setCustomLightbox(null);
+          return;
+        }
         setActiveArticle(null);
-        setLightboxIndex(null);
-        setCustomLightbox(null);
         setThemeMenuOpen(false);
+      } else if (articleLightbox && articleLightbox.images.length > 1) {
+        if (e.key === 'ArrowRight') {
+          setArticleLightbox((prev) =>
+            prev
+              ? { ...prev, index: (prev.index + 1) % prev.images.length }
+              : null
+          );
+        } else if (e.key === 'ArrowLeft') {
+          setArticleLightbox((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  index:
+                    (prev.index - 1 + prev.images.length) % prev.images.length,
+                }
+              : null
+          );
+        }
       } else if (lightboxIndex !== null && mediaList.length > 0) {
         if (e.key === 'ArrowRight') {
           setLightboxIndex((prev) =>
@@ -222,7 +254,7 @@ export function PublicPortal({
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [lightboxIndex, mediaList.length]);
+  }, [articleLightbox, customLightbox, lightboxIndex, mediaList.length]);
 
   // Smooth slim top progress bar tracking scroll depth
   useEffect(() => {
@@ -1044,11 +1076,18 @@ export function PublicPortal({
                           style={{ backgroundColor: theme.bgSurfaceAlt }}
                         >
                           <MediaImage
-                            src={leadStory.imageUrl}
+                            src={getPrimaryMediaUrl(leadStory.imageUrl)}
                             alt={tr(leadStory.title)}
                             className="w3-img-hover h-full w-full object-cover"
                             fallbackTitle={tr(leadStory.title)}
                           />
+                          {parseMediaUrls(leadStory.imageUrl).length > 1 && (
+                            <span className="pointer-events-none absolute left-3 bottom-3 inline-flex items-center gap-1.5 rounded bg-black/70 px-2.5 py-1 text-[11px] font-medium text-white">
+                              <Images className="h-3.5 w-3.5" />
+                              {parseMediaUrls(leadStory.imageUrl).length}{' '}
+                              {tr('ta rasm')}
+                            </span>
+                          )}
                           <span className="pointer-events-none absolute right-3 bottom-3 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity duration-300 group-hover:opacity-100">
                             <ZoomIn className="h-4 w-4" />
                           </span>
@@ -1118,11 +1157,17 @@ export function PublicPortal({
                             style={{ backgroundColor: theme.bgSurfaceAlt }}
                           >
                             <MediaImage
-                              src={item.imageUrl}
+                              src={getPrimaryMediaUrl(item.imageUrl)}
                               alt={tr(item.title)}
                               className="w3-img-hover h-full w-full object-cover"
                               fallbackTitle={tr(item.title)}
                             />
+                            {parseMediaUrls(item.imageUrl).length > 1 && (
+                              <span className="pointer-events-none absolute left-3 bottom-3 inline-flex items-center gap-1 rounded bg-black/70 px-2 py-0.5 text-[11px] font-medium text-white">
+                                <Images className="h-3 w-3" />
+                                {parseMediaUrls(item.imageUrl).length}
+                              </span>
+                            )}
                             <span className="pointer-events-none absolute right-3 bottom-3 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity duration-300 group-hover:opacity-100">
                               <ZoomIn className="h-4 w-4" />
                             </span>
@@ -2060,20 +2105,86 @@ export function PublicPortal({
               <h2 className="font-serif-editorial text-2xl font-bold leading-snug lg:text-3xl">
                 {tr(activeArticle.title)}
               </h2>
-              {activeArticle.imageUrl && (
-                <div
-                  className="mt-6 aspect-[16/9] w-full overflow-hidden rounded-lg border"
-                  style={{
-                    borderColor: theme.borderSubtle,
-                    backgroundColor: theme.bgSurfaceAlt,
-                  }}
-                >
-                  <MediaImage
-                    src={activeArticle.imageUrl}
-                    alt={tr(activeArticle.title)}
-                  />
-                </div>
-              )}
+              {(() => {
+                const articleImages = parseMediaUrls(activeArticle.imageUrl);
+                if (articleImages.length === 0) return null;
+                return (
+                  <div className="mt-6 space-y-3">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setArticleLightbox({
+                          images: articleImages,
+                          index: 0,
+                          title: activeArticle.title,
+                          subtitle: `${activeArticle.category} · ${activeArticle.date}`,
+                        })
+                      }
+                      className="group relative block aspect-[16/9] w-full overflow-hidden rounded-lg border text-left"
+                      style={{
+                        borderColor: theme.borderSubtle,
+                        backgroundColor: theme.bgSurfaceAlt,
+                      }}
+                    >
+                      <MediaImage
+                        src={articleImages[0]}
+                        alt={tr(activeArticle.title)}
+                        className="w3-img-hover h-full w-full object-cover"
+                      />
+                      <span className="pointer-events-none absolute right-3 bottom-3 inline-flex items-center gap-1.5 rounded-md bg-black/70 px-2.5 py-1 text-xs font-medium text-white opacity-90 transition-opacity group-hover:opacity-100">
+                        <ZoomIn className="h-3.5 w-3.5" />
+                        {articleImages.length > 1
+                          ? tr(`Galereyani ochish (${articleImages.length})`)
+                          : tr('Kattalashtirish')}
+                      </span>
+                    </button>
+
+                    {articleImages.length > 1 && (
+                      <div>
+                        <p
+                          className="mb-2 inline-flex items-center gap-1.5 text-xs font-semibold"
+                          style={{ color: theme.textMuted }}
+                        >
+                          <Images className="h-3.5 w-3.5" />
+                          {tr(
+                            `Yangilik fotogalereyasi (${articleImages.length} ta rasm)`
+                          )}
+                        </p>
+                        <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-4">
+                          {articleImages.map((imgUrl, idx) => (
+                            <button
+                              key={`${imgUrl}-${idx}`}
+                              type="button"
+                              onClick={() =>
+                                setArticleLightbox({
+                                  images: articleImages,
+                                  index: idx,
+                                  title: activeArticle.title,
+                                  subtitle: `${activeArticle.category} · ${activeArticle.date}`,
+                                })
+                              }
+                              className="group relative aspect-[4/3] overflow-hidden rounded-md border"
+                              style={{
+                                borderColor: theme.borderSubtle,
+                                backgroundColor: theme.bgSurfaceAlt,
+                              }}
+                            >
+                              <MediaImage
+                                src={imgUrl}
+                                alt={`${tr(activeArticle.title)} — ${idx + 1}`}
+                                className="w3-img-hover h-full w-full object-cover"
+                              />
+                              <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/30">
+                                <ZoomIn className="h-5 w-5 text-white opacity-0 transition-opacity group-hover:opacity-100" />
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
               <div
                 className="mx-auto mt-6 max-w-prose space-y-4 font-serif-editorial text-base leading-[1.8]"
                 style={{ color: theme.textSecondary }}
@@ -2090,12 +2201,13 @@ export function PublicPortal({
       )}
 
       {/* Gallery Image Lightbox Modal (W3 Zoom + Prev/Next Slider) */}
-      {(activeLightboxMedia || customLightbox) && (
+      {(activeLightboxMedia || customLightbox || articleLightbox) && (
         <div
-          className="w3-animate-opacity fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 p-4 backdrop-blur-[2px]"
+          className="w3-animate-opacity fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/90 p-4 backdrop-blur-[2px]"
           onClick={() => {
             setLightboxIndex(null);
             setCustomLightbox(null);
+            setArticleLightbox(null);
           }}
           role="dialog"
           aria-modal="true"
@@ -2110,21 +2222,28 @@ export function PublicPortal({
             onClick={(e) => e.stopPropagation()}
           >
             <div
-              className="flex items-center justify-between border-b px-5 py-3.5"
+              className="flex items-center justify-between gap-4 border-b px-5 py-3.5"
               style={{ borderColor: theme.borderSubtle }}
             >
-              <div>
-                <p className="text-sm font-semibold">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold">
                   {tr(
-                    activeLightboxMedia?.title || customLightbox?.title || ''
+                    articleLightbox?.title ||
+                      activeLightboxMedia?.title ||
+                      customLightbox?.title ||
+                      ''
                   )}
                 </p>
                 <p className="text-xs" style={{ color: theme.textMuted }}>
-                  {activeLightboxMedia
-                    ? `${tr(activeLightboxMedia.category)} · ${
-                        activeLightboxMedia.createdAt
-                      }`
-                    : tr(customLightbox?.subtitle || '')}
+                  {articleLightbox
+                    ? `${tr(articleLightbox.subtitle || '')} · ${
+                        articleLightbox.index + 1
+                      } / ${articleLightbox.images.length}`
+                    : activeLightboxMedia
+                      ? `${tr(activeLightboxMedia.category)} · ${
+                          activeLightboxMedia.createdAt
+                        }`
+                      : tr(customLightbox?.subtitle || '')}
                 </p>
               </div>
               <button
@@ -2132,24 +2251,73 @@ export function PublicPortal({
                 onClick={() => {
                   setLightboxIndex(null);
                   setCustomLightbox(null);
+                  setArticleLightbox(null);
                 }}
-                className="rounded p-1.5 hover:bg-black/5"
+                className="shrink-0 rounded p-1.5 hover:bg-black/5"
                 aria-label="Yopish"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            <div className="relative flex max-h-[75vh] min-h-[300px] items-center justify-center overflow-hidden bg-slate-950">
+            <div className="relative flex max-h-[72vh] min-h-[300px] items-center justify-center overflow-hidden bg-slate-950">
               <MediaImage
-                src={activeLightboxMedia?.url || customLightbox?.url}
+                src={
+                  articleLightbox
+                    ? articleLightbox.images[articleLightbox.index]
+                    : activeLightboxMedia?.url || customLightbox?.url
+                }
                 alt={tr(
-                  activeLightboxMedia?.title || customLightbox?.title || ''
+                  articleLightbox?.title ||
+                    activeLightboxMedia?.title ||
+                    customLightbox?.title ||
+                    ''
                 )}
-                className="mx-auto max-h-[75vh] w-auto object-contain"
+                className="mx-auto max-h-[72vh] w-auto object-contain"
               />
 
-              {activeLightboxMedia && mediaList.length > 1 && (
+              {articleLightbox && articleLightbox.images.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setArticleLightbox((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              index:
+                                (prev.index - 1 + prev.images.length) %
+                                prev.images.length,
+                            }
+                          : null
+                      )
+                    }
+                    className="btn-glow-ribbon absolute left-3 top-1/2 -translate-y-1/2 rounded-full border border-white/25 bg-black/60 p-2.5 text-white"
+                    aria-label="Oldingi rasm"
+                  >
+                    <ChevronLeft className="h-5 w-5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setArticleLightbox((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              index: (prev.index + 1) % prev.images.length,
+                            }
+                          : null
+                      )
+                    }
+                    className="btn-glow-ribbon absolute right-3 top-1/2 -translate-y-1/2 rounded-full border border-white/25 bg-black/60 p-2.5 text-white"
+                    aria-label="Keyingi rasm"
+                  >
+                    <ChevronRight className="h-5 w-5" />
+                  </button>
+                </>
+              )}
+
+              {!articleLightbox && activeLightboxMedia && mediaList.length > 1 && (
                 <>
                   <button
                     type="button"
@@ -2180,6 +2348,39 @@ export function PublicPortal({
                 </>
               )}
             </div>
+
+            {articleLightbox && articleLightbox.images.length > 1 && (
+              <div
+                className="flex gap-2 overflow-x-auto border-t px-4 py-3"
+                style={{ borderColor: theme.borderSubtle }}
+              >
+                {articleLightbox.images.map((thumbUrl, thumbIdx) => {
+                  const isCurrent = thumbIdx === articleLightbox.index;
+                  return (
+                    <button
+                      key={`${thumbUrl}-${thumbIdx}`}
+                      type="button"
+                      onClick={() =>
+                        setArticleLightbox((prev) =>
+                          prev ? { ...prev, index: thumbIdx } : null
+                        )
+                      }
+                      className={`h-14 w-20 shrink-0 overflow-hidden rounded border-2 transition ${
+                        isCurrent
+                          ? 'border-[#134280] ring-2 ring-[#134280]/40'
+                          : 'border-transparent opacity-65 hover:opacity-100'
+                      }`}
+                    >
+                      <MediaImage
+                        src={thumbUrl}
+                        alt={`${thumbIdx + 1}`}
+                        className="h-full w-full object-cover"
+                      />
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       )}

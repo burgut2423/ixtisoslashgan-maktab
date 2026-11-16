@@ -3,6 +3,7 @@ import type { ChangeEvent, FormEvent } from 'react';
 import type { User } from 'firebase/auth';
 import {
   BookOpen,
+  Check,
   CheckCircle2,
   Copy,
   Database,
@@ -12,6 +13,7 @@ import {
   FileText,
   FolderOpen,
   Image as ImageIcon,
+  Images,
   Inbox,
   KeyRound,
   LayoutDashboard,
@@ -71,6 +73,13 @@ import {
   upsertStaticRow,
   upsertStaticSecuritySetting,
 } from '../services/staticFallback';
+import {
+  getPrimaryMediaUrl,
+  optimizeImageForStaticStorage,
+  parseMediaUrls,
+  readFileAsDataUrl,
+  serializeMediaUrls,
+} from '../utils/mediaHelpers';
 
 type AdminTab =
   | 'overview'
@@ -107,15 +116,6 @@ interface ConfirmState {
   confirmLabel?: string;
   destructive?: boolean;
   action: () => Promise<void>;
-}
-
-async function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ''));
-    reader.onerror = () => reject(new Error('Faylni o‘qib bo‘lmadi'));
-    reader.readAsDataURL(file);
-  });
 }
 
 export function AdminDashboard({
@@ -249,14 +249,18 @@ export function AdminDashboard({
             () => null
           );
           if (discovered) {
-            await fetch('/api/config', {
+            const nextDiscovered: SiteConfig = {
+              ...discovered,
+              configuredByEmail: user?.email || '',
+            };
+            const cfgRes = await fetchApiOrFallback('/api/config', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                ...discovered,
-                configuredByEmail: user?.email || '',
-              }),
+              body: JSON.stringify(nextDiscovered),
             });
+            if (!cfgRes.isBackendAvailable) {
+              saveStaticConfig(nextDiscovered);
+            }
             targetConfig = discovered;
             onConfigUpdated(discovered);
             onPublicDataChanged();
@@ -282,7 +286,7 @@ export function AdminDashboard({
           if (sheetAllowed) {
             setAllowedEmails(parseAllowedEmails(sheetAllowed));
           }
-          await fetch('/api/cms/replace-all', {
+          await fetchApiOrFallback('/api/cms/replace-all', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data),
@@ -318,7 +322,7 @@ export function AdminDashboard({
     file: File,
     folderTarget: 'media' | 'docs' = 'media'
   ): Promise<{ url: string; driveFileId: string; size: string }> => {
-    const sizeText = `${Math.max(1, Math.round(file.size / 1024))} KB`;
+    const fallbackSizeText = `${Math.max(1, Math.round(file.size / 1024))} KB`;
 
     if (accessToken && !needsAuth) {
       const folderId =
@@ -342,20 +346,81 @@ export function AdminDashboard({
               : buildDriveMediaProxyUrl(uploaded.id),
           size: uploaded.size
             ? `${Math.max(1, Math.round(Number(uploaded.size) / 1024))} KB`
-            : sizeText,
+            : fallbackSizeText,
         };
       }
     }
 
-    const base64 = await fileToBase64(file);
-    const res = await fetch('/api/upload', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fileName: file.name, base64 }),
-    });
-    if (!res.ok) throw new Error('Faylni serverga yuklab bo‘lmadi');
-    const json = (await res.json()) as { url: string; size: string };
-    return { url: json.url, driveFileId: '', size: json.size };
+    const optimized =
+      folderTarget === 'media' && file.type.startsWith('image/')
+        ? await optimizeImageForStaticStorage(file)
+        : {
+            dataUrl: await readFileAsDataUrl(file),
+            sizeText: fallbackSizeText,
+          };
+
+    const apiRes = await fetchApiOrFallback<{ url: string; size: string }>(
+      '/api/upload',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileName: file.name, base64: optimized.dataUrl }),
+      }
+    );
+
+    if (apiRes.isBackendAvailable && apiRes.response?.ok && apiRes.data?.url) {
+      return {
+        url: apiRes.data.url,
+        driveFileId: '',
+        size: apiRes.data.size || optimized.sizeText,
+      };
+    }
+
+    // Static hosting / GitHub Pages fallback: persist lightweight Data URL locally
+    return {
+      url: optimized.dataUrl,
+      driveFileId: '',
+      size: optimized.sizeText,
+    };
+  };
+
+  const registerMediaAsset = async (
+    file: File,
+    uploaded: { url: string; driveFileId: string; size: string },
+    category: string,
+    titleOverride?: string
+  ): Promise<MediaAsset> => {
+    const uniqueSuffix = `${Date.now().toString().slice(-5)}-${Math.random()
+      .toString(36)
+      .slice(2, 5)
+      .toUpperCase()}`;
+    const mediaObj: MediaAsset = {
+      id: `MED-${uniqueSuffix}`,
+      title: (titleOverride || '').trim() || file.name.replace(/\.[^.]+$/, ''),
+      category,
+      mimeType: file.type || 'image/jpeg',
+      driveFileId: uploaded.driveFileId,
+      url: uploaded.url,
+      createdAt: new Date().toISOString().slice(0, 10),
+      size: uploaded.size,
+    };
+
+    await saveRowSmart('Media', mediaObj as unknown as Record<string, string>, [
+      mediaObj.id,
+      mediaObj.title,
+      mediaObj.category,
+      mediaObj.mimeType,
+      mediaObj.driveFileId,
+      mediaObj.url,
+      mediaObj.createdAt,
+      mediaObj.size,
+    ]);
+
+    setDataset((prev) =>
+      prev ? { ...prev, media: [mediaObj, ...prev.media] } : prev
+    );
+
+    return mediaObj;
   };
 
   const saveRowSmart = async (
@@ -496,11 +561,14 @@ export function AdminDashboard({
       configuredAt: new Date().toISOString(),
       configuredByEmail: user?.email || '',
     };
-    await fetch('/api/config', {
+    const cfgRes = await fetchApiOrFallback('/api/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(nextConfig),
     });
+    if (!cfgRes.isBackendAvailable) {
+      saveStaticConfig(nextConfig);
+    }
     onConfigUpdated(nextConfig);
     onPublicDataChanged();
     await refreshAdminWorkspace(accessToken, nextConfig);
@@ -531,35 +599,25 @@ export function AdminDashboard({
   };
 
   const handleUploadMediaFile = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
 
     setUploadingMedia(true);
     setStatusMessage(null);
     try {
-      const uploaded = await uploadMediaSmart(file, 'media');
-      const newMediaId = `MED-${Date.now().toString().slice(-5)}`;
-      const mediaObj: MediaAsset = {
-        id: newMediaId,
-        title: mediaTitle.trim() || file.name,
-        category: mediaCategory,
-        mimeType: file.type || 'image/jpeg',
-        driveFileId: uploaded.driveFileId,
-        url: uploaded.url,
-        createdAt: new Date().toISOString().slice(0, 10),
-        size: uploaded.size,
-      };
-
-      await saveRowSmart('Media', mediaObj as unknown as Record<string, string>, [
-        mediaObj.id,
-        mediaObj.title,
-        mediaObj.category,
-        mediaObj.mimeType,
-        mediaObj.driveFileId,
-        mediaObj.url,
-        mediaObj.createdAt,
-        mediaObj.size,
-      ]);
+      let uploadedCount = 0;
+      for (let i = 0; i < files.length; i += 1) {
+        const file = files[i];
+        const uploaded = await uploadMediaSmart(file, 'media');
+        const titleHint =
+          mediaTitle.trim() && files.length === 1
+            ? mediaTitle.trim()
+            : mediaTitle.trim()
+              ? `${mediaTitle.trim()} (${i + 1})`
+              : file.name.replace(/\.[^.]+$/, '');
+        await registerMediaAsset(file, uploaded, mediaCategory, titleHint);
+        uploadedCount += 1;
+      }
 
       setMediaTitle('');
       e.target.value = '';
@@ -568,8 +626,8 @@ export function AdminDashboard({
       setStatusMessage({
         type: 'success',
         text: isGoogleConnected
-          ? `"${file.name}" Google Drive Media papkasiga yuklandi va Sheets jadvaliga qo‘shildi.`
-          : `"${file.name}" media kutubxonasiga saqlandi.`,
+          ? `${uploadedCount} ta fayl Google Drive Media papkasiga yuklandi va Sheets jadvaliga qo‘shildi.`
+          : `${uploadedCount} ta fayl media kutubxonasiga muvaffaqiyatli yuklandi.`,
       });
     } catch (err) {
       setStatusMessage({
@@ -1454,20 +1512,39 @@ export function AdminDashboard({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
-                    {(dataset?.news || []).map((item) => (
-                      <tr key={item.id} className="hover:bg-slate-50">
-                        <td className="px-4 py-3 font-medium text-slate-900">
-                          {item.title}
-                        </td>
-                        <td className="px-4 py-3 text-xs text-slate-600">
-                          {item.category}
-                        </td>
-                        <td className="px-4 py-3 font-mono-tabular text-xs text-slate-600">
-                          {item.date}
-                        </td>
-                        <td className="px-4 py-3 text-xs text-slate-700">
-                          {item.status}
-                        </td>
+                    {(dataset?.news || []).map((item) => {
+                      const coverUrl = getPrimaryMediaUrl(item.imageUrl);
+                      const galleryCount = parseMediaUrls(item.imageUrl).length;
+                      return (
+                        <tr key={item.id} className="hover:bg-slate-50">
+                          <td className="px-4 py-3 font-medium text-slate-900">
+                            <div className="flex items-center gap-3">
+                              {coverUrl && (
+                                <div className="relative h-10 w-14 shrink-0 overflow-hidden rounded border border-slate-200 bg-slate-100">
+                                  <MediaImage
+                                    src={coverUrl}
+                                    alt={item.title}
+                                    className="h-full w-full object-cover"
+                                  />
+                                  {galleryCount > 1 && (
+                                    <span className="absolute right-0.5 bottom-0.5 rounded bg-slate-950/75 px-1 text-[10px] font-semibold text-white">
+                                      +{galleryCount - 1}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                              <span className="line-clamp-2">{item.title}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-xs text-slate-600">
+                            {item.category}
+                          </td>
+                          <td className="px-4 py-3 font-mono-tabular text-xs text-slate-600">
+                            {item.date}
+                          </td>
+                          <td className="px-4 py-3 text-xs text-slate-700">
+                            {item.status}
+                          </td>
                         <td className="px-4 py-3 text-right whitespace-nowrap">
                           <button
                             type="button"
@@ -1489,7 +1566,8 @@ export function AdminDashboard({
                           </button>
                         </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -1781,10 +1859,11 @@ export function AdminDashboard({
                   </select>
                   <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-md bg-[#134280] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0D3162]">
                     <Upload className="h-4 w-4" />
-                    {uploadingMedia ? 'Yuklanmoqda...' : 'Rasm yuklash'}
+                    {uploadingMedia ? 'Yuklanmoqda...' : 'Rasm(lar) tanlash va yuklash'}
                     <input
                       type="file"
                       accept="image/*,video/*"
+                      multiple
                       onChange={handleUploadMediaFile}
                       disabled={uploadingMedia}
                       className="hidden"
@@ -1989,26 +2068,138 @@ export function AdminDashboard({
                 </div>
 
                 <div className="mt-5 grid gap-4 md:grid-cols-2">
-                  {settingsDraft.map((row, idx) => (
-                    <div key={row.key}>
-                      <label className="block text-xs font-medium text-slate-700">
-                        {row.label || row.key}
-                      </label>
-                      <input
-                        type="text"
-                        value={row.value}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setSettingsDraft((prev) =>
-                            prev.map((r, i) =>
-                              i === idx ? { ...r, value: val } : r
-                            )
-                          );
-                        }}
-                        className="mt-1.5 w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-[#134280] focus:outline-none"
-                      />
-                    </div>
-                  ))}
+                  {settingsDraft.map((row, idx) =>
+                    row.key === 'hero_image_url' ? (
+                      <div
+                        key={row.key}
+                        className="rounded-lg border border-slate-200 bg-slate-50/70 p-4 md:col-span-2"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <label className="block text-xs font-semibold text-slate-800">
+                            {row.label || 'Bosh sahifa asosiy rasmi'}
+                          </label>
+                          <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50">
+                            <Upload className="h-3.5 w-3.5" />
+                            Kompyuterdan yuklash
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={async (ev) => {
+                                const f = ev.target.files?.[0];
+                                if (!f) return;
+                                try {
+                                  const up = await uploadMediaSmart(f, 'media');
+                                  await registerMediaAsset(f, up, 'Kampus');
+                                  setSettingsDraft((prev) =>
+                                    prev.map((r, i) =>
+                                      i === idx ? { ...r, value: up.url } : r
+                                    )
+                                  );
+                                  onPublicDataChanged();
+                                } catch (err) {
+                                  setStatusMessage({
+                                    type: 'error',
+                                    text:
+                                      err instanceof Error
+                                        ? err.message
+                                        : 'Rasmni yuklab bo‘lmadi',
+                                  });
+                                } finally {
+                                  ev.target.value = '';
+                                }
+                              }}
+                            />
+                          </label>
+                        </div>
+
+                        <div className="mt-3 grid gap-3 sm:grid-cols-4">
+                          {row.value && (
+                            <div className="aspect-[16/10] overflow-hidden rounded-md border border-slate-200 bg-white">
+                              <MediaImage
+                                src={row.value}
+                                alt="Asosiy rasm"
+                                className="h-full w-full object-cover"
+                              />
+                            </div>
+                          )}
+                          <div
+                            className={`grid max-h-36 grid-cols-3 gap-2 overflow-y-auto sm:grid-cols-5 ${
+                              row.value ? 'sm:col-span-3' : 'sm:col-span-4'
+                            }`}
+                          >
+                            {(dataset?.media || []).map((m) => {
+                              const selected = row.value === m.url;
+                              return (
+                                <button
+                                  key={m.id}
+                                  type="button"
+                                  onClick={() =>
+                                    setSettingsDraft((prev) =>
+                                      prev.map((r, i) =>
+                                        i === idx ? { ...r, value: m.url } : r
+                                      )
+                                    )
+                                  }
+                                  className={`group relative aspect-[4/3] overflow-hidden rounded border-2 text-left transition ${
+                                    selected
+                                      ? 'border-[#134280] ring-2 ring-[#134280]/30'
+                                      : 'border-slate-200 hover:border-slate-400'
+                                  }`}
+                                  title={m.title}
+                                >
+                                  <MediaImage
+                                    src={m.url}
+                                    alt={m.title}
+                                    className="h-full w-full object-cover"
+                                  />
+                                  {selected && (
+                                    <span className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-[#134280] text-white">
+                                      <Check className="h-3 w-3" />
+                                    </span>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        <input
+                          type="text"
+                          value={row.value}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setSettingsDraft((prev) =>
+                              prev.map((r, i) =>
+                                i === idx ? { ...r, value: val } : r
+                              )
+                            );
+                          }}
+                          placeholder="Rasm URL manzili"
+                          className="mt-2.5 w-full rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-700 focus:border-[#134280] focus:outline-none"
+                        />
+                      </div>
+                    ) : (
+                      <div key={row.key}>
+                        <label className="block text-xs font-medium text-slate-700">
+                          {row.label || row.key}
+                        </label>
+                        <input
+                          type="text"
+                          value={row.value}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setSettingsDraft((prev) =>
+                              prev.map((r, i) =>
+                                i === idx ? { ...r, value: val } : r
+                              )
+                            );
+                          }}
+                          className="mt-1.5 w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-[#134280] focus:outline-none"
+                        />
+                      </div>
+                    )
+                  )}
                 </div>
               </div>
 
@@ -2338,58 +2529,181 @@ export function AdminDashboard({
                 </div>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div>
-                  <label className="block text-xs font-medium text-slate-700">
-                    Kutubxonadan rasm tanlash
-                  </label>
-                  <select
-                    value={editingNews.imageUrl}
-                    onChange={(e) => {
-                      const selected = dataset?.media.find(
-                        (m) => m.url === e.target.value
-                      );
-                      setEditingNews({
-                        ...editingNews,
-                        imageUrl: e.target.value,
-                        driveFileId: selected?.driveFileId || '',
-                      });
-                    }}
-                    className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                  >
-                    <option value="">Rasm tanlang...</option>
-                    {(dataset?.media || []).map((m) => (
-                      <option key={m.id} value={m.url}>
-                        {m.title}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-700">
-                    Yoki yangi rasm yuklash
-                  </label>
-                  <label className="mt-1 flex cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100">
-                    <Upload className="h-3.5 w-3.5" />
-                    Kompyuterdan yuklash
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={async (ev) => {
-                        const f = ev.target.files?.[0];
-                        if (!f) return;
-                        const up = await uploadMediaSmart(f, 'media');
-                        setEditingNews({
-                          ...editingNews,
-                          imageUrl: up.url,
-                          driveFileId: up.driveFileId,
-                        });
-                      }}
-                      className="hidden"
-                    />
-                  </label>
-                </div>
-              </div>
+              {(() => {
+                const selectedUrls = parseMediaUrls(editingNews.imageUrl);
+                const toggleImageUrl = (url: string, driveFileId?: string) => {
+                  const exists = selectedUrls.includes(url);
+                  const nextUrls = exists
+                    ? selectedUrls.filter((u) => u !== url)
+                    : [...selectedUrls, url];
+                  setEditingNews({
+                    ...editingNews,
+                    imageUrl: serializeMediaUrls(nextUrls),
+                    driveFileId:
+                      !exists && !editingNews.driveFileId && driveFileId
+                        ? driveFileId
+                        : editingNews.driveFileId,
+                  });
+                };
+                const makeCoverImage = (url: string) => {
+                  const nextUrls = [
+                    url,
+                    ...selectedUrls.filter((u) => u !== url),
+                  ];
+                  setEditingNews({
+                    ...editingNews,
+                    imageUrl: serializeMediaUrls(nextUrls),
+                  });
+                };
+
+                return (
+                  <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50/70 p-3.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-800">
+                        <Images className="h-4 w-4 text-[#134280]" />
+                        Yangilik rasmlari va galereya ({selectedUrls.length} ta)
+                      </span>
+                      <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-[#134280] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#0D3162]">
+                        <Upload className="h-3.5 w-3.5" />
+                        Kompyuterdan rasm(lar) yuklash
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          onChange={async (ev) => {
+                            const files = Array.from(ev.target.files || []);
+                            if (files.length === 0) return;
+                            try {
+                              const addedUrls: string[] = [];
+                              let firstDriveId = editingNews.driveFileId;
+                              for (const f of files) {
+                                const up = await uploadMediaSmart(f, 'media');
+                                await registerMediaAsset(
+                                  f,
+                                  up,
+                                  editingNews.category || 'Tadbirlar'
+                                );
+                                addedUrls.push(up.url);
+                                if (!firstDriveId && up.driveFileId) {
+                                  firstDriveId = up.driveFileId;
+                                }
+                              }
+                              setEditingNews({
+                                ...editingNews,
+                                imageUrl: serializeMediaUrls([
+                                  ...selectedUrls,
+                                  ...addedUrls,
+                                ]),
+                                driveFileId: firstDriveId,
+                              });
+                              onPublicDataChanged();
+                            } catch (err) {
+                              setStatusMessage({
+                                type: 'error',
+                                text:
+                                  err instanceof Error
+                                    ? err.message
+                                    : 'Rasmlarni yuklab bo‘lmadi',
+                              });
+                            } finally {
+                              ev.target.value = '';
+                            }
+                          }}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+
+                    {selectedUrls.length > 0 ? (
+                      <div>
+                        <p className="mb-1.5 text-[11px] font-medium text-slate-600">
+                          Tanlangan rasmlar (birinchisi asosiy muqova sifatida ko‘rinadi):
+                        </p>
+                        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                          {selectedUrls.map((url, idx) => (
+                            <div
+                              key={`${url}-${idx}`}
+                              className={`group relative aspect-[4/3] overflow-hidden rounded-md border-2 bg-white ${
+                                idx === 0
+                                  ? 'border-[#134280]'
+                                  : 'border-slate-200'
+                              }`}
+                            >
+                              <MediaImage
+                                src={url}
+                                alt={`Tanlangan rasm ${idx + 1}`}
+                                className="h-full w-full object-cover"
+                              />
+                              <span className="absolute left-1 top-1 rounded bg-slate-950/75 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                                {idx === 0 ? 'Asosiy' : `#${idx + 1}`}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => toggleImageUrl(url)}
+                                className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-white shadow hover:bg-red-700"
+                                title="Olib tashlash"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                              {idx > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => makeCoverImage(url)}
+                                  className="absolute inset-x-1 bottom-1 rounded bg-slate-950/75 py-0.5 text-[10px] font-medium text-white opacity-0 transition-opacity group-hover:opacity-100"
+                                >
+                                  Asosiy qilish
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="rounded border border-dashed border-slate-300 bg-white px-3 py-2 text-xs text-slate-500">
+                        Hali rasm tanlanmagan. Quyidagi kutubxonadan bir yoki bir nechta rasmni bosing yoki kompyuterdan yuklang.
+                      </p>
+                    )}
+
+                    <div>
+                      <p className="mb-1.5 text-[11px] font-medium text-slate-600">
+                        Media kutubxonasidan tanlash (bir nechta tanlash uchun bosing):
+                      </p>
+                      <div className="grid max-h-40 grid-cols-4 gap-2 overflow-y-auto rounded-md border border-slate-200 bg-white p-2 sm:grid-cols-6">
+                        {(dataset?.media || []).map((m) => {
+                          const isSelected = selectedUrls.includes(m.url);
+                          const orderIdx = selectedUrls.indexOf(m.url);
+                          return (
+                            <button
+                              key={m.id}
+                              type="button"
+                              onClick={() =>
+                                toggleImageUrl(m.url, m.driveFileId)
+                              }
+                              className={`relative aspect-square overflow-hidden rounded border-2 transition ${
+                                isSelected
+                                  ? 'border-[#134280] ring-2 ring-[#134280]/30'
+                                  : 'border-slate-200 hover:border-slate-400'
+                              }`}
+                              title={m.title}
+                            >
+                              <MediaImage
+                                src={m.url}
+                                alt={m.title}
+                                className="h-full w-full object-cover"
+                              />
+                              {isSelected && (
+                                <span className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-[#134280] text-[10px] font-bold text-white shadow">
+                                  {orderIdx + 1}
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               <div>
                 <label className="block text-xs font-medium text-slate-700">
@@ -2575,6 +2889,81 @@ export function AdminDashboard({
                 }
                 className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
               />
+              <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50/70 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-semibold text-slate-700">
+                    Yo‘nalish rasmi
+                  </span>
+                  <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50">
+                    <Upload className="h-3.5 w-3.5" />
+                    Rasm yuklash
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={async (ev) => {
+                        const f = ev.target.files?.[0];
+                        if (!f) return;
+                        try {
+                          const up = await uploadMediaSmart(f, 'media');
+                          await registerMediaAsset(f, up, "O'quv jarayoni");
+                          setEditingProgram({
+                            ...editingProgram,
+                            imageUrl: up.url,
+                            driveFileId: up.driveFileId,
+                          });
+                          onPublicDataChanged();
+                        } catch (err) {
+                          setStatusMessage({
+                            type: 'error',
+                            text:
+                              err instanceof Error
+                                ? err.message
+                                : 'Rasm yuklab bo‘lmadi',
+                          });
+                        } finally {
+                          ev.target.value = '';
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+                <div className="grid max-h-28 grid-cols-5 gap-2 overflow-y-auto rounded border border-slate-200 bg-white p-1.5">
+                  {(dataset?.media || []).map((m) => {
+                    const selected = editingProgram.imageUrl === m.url;
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() =>
+                          setEditingProgram({
+                            ...editingProgram,
+                            imageUrl: m.url,
+                            driveFileId: m.driveFileId,
+                          })
+                        }
+                        className={`relative aspect-[4/3] overflow-hidden rounded border-2 ${
+                          selected
+                            ? 'border-[#134280] ring-2 ring-[#134280]/30'
+                            : 'border-slate-200 hover:border-slate-400'
+                        }`}
+                        title={m.title}
+                      >
+                        <MediaImage
+                          src={m.url}
+                          alt={m.title}
+                          className="h-full w-full object-cover"
+                        />
+                        {selected && (
+                          <span className="absolute right-0.5 top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#134280] text-white">
+                            <Check className="h-2.5 w-2.5" />
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
             <div className="mt-5 flex justify-end gap-3">
               <button
@@ -2716,43 +3105,101 @@ export function AdminDashboard({
                   className="rounded-md border border-slate-300 px-3 py-2 text-sm"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <select
-                  value={editingLeader.imageUrl}
-                  onChange={(e) =>
-                    setEditingLeader({
-                      ...editingLeader,
-                      imageUrl: e.target.value,
-                    })
-                  }
-                  className="rounded-md border border-slate-300 px-3 py-2 text-sm"
-                >
-                  <option value="">Rasm tanlash...</option>
-                  {(dataset?.media || []).map((m) => (
-                    <option key={m.id} value={m.url}>
-                      {m.title}
-                    </option>
-                  ))}
-                </select>
-                <label className="flex cursor-pointer items-center justify-center gap-1.5 rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100">
-                  <Upload className="h-3.5 w-3.5" />
-                  Portret yuklash
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={async (ev) => {
-                      const f = ev.target.files?.[0];
-                      if (!f) return;
-                      const up = await uploadMediaSmart(f, 'media');
-                      setEditingLeader({
-                        ...editingLeader,
-                        imageUrl: up.url,
-                        driveFileId: up.driveFileId,
-                      });
-                    }}
-                    className="hidden"
-                  />
-                </label>
+              <div className="space-y-2.5 rounded-lg border border-slate-200 bg-slate-50/70 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-xs font-semibold text-slate-800">
+                    Xodim portreti
+                  </span>
+                  <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50">
+                    <Upload className="h-3.5 w-3.5" />
+                    Portret yuklash
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={async (ev) => {
+                        const f = ev.target.files?.[0];
+                        if (!f) return;
+                        try {
+                          const up = await uploadMediaSmart(f, 'media');
+                          await registerMediaAsset(
+                            f,
+                            up,
+                            'Rahbariyat',
+                            editingLeader.fullName || undefined
+                          );
+                          setEditingLeader({
+                            ...editingLeader,
+                            imageUrl: up.url,
+                            driveFileId: up.driveFileId,
+                          });
+                          onPublicDataChanged();
+                        } catch (err) {
+                          setStatusMessage({
+                            type: 'error',
+                            text:
+                              err instanceof Error
+                                ? err.message
+                                : 'Portret yuklab bo‘lmadi',
+                          });
+                        } finally {
+                          ev.target.value = '';
+                        }
+                      }}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-4">
+                  {editingLeader.imageUrl && (
+                    <div className="aspect-[4/3] overflow-hidden rounded border border-slate-200 bg-white">
+                      <MediaImage
+                        src={editingLeader.imageUrl}
+                        alt={editingLeader.fullName || 'Portret'}
+                        className="h-full w-full object-cover object-top"
+                      />
+                    </div>
+                  )}
+                  <div
+                    className={`grid max-h-32 grid-cols-4 gap-2 overflow-y-auto rounded border border-slate-200 bg-white p-1.5 ${
+                      editingLeader.imageUrl ? 'sm:col-span-3' : 'sm:col-span-4'
+                    }`}
+                  >
+                    {(dataset?.media || []).map((m) => {
+                      const selected = editingLeader.imageUrl === m.url;
+                      return (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() =>
+                            setEditingLeader({
+                              ...editingLeader,
+                              imageUrl: m.url,
+                              driveFileId: m.driveFileId,
+                            })
+                          }
+                          className={`relative aspect-square overflow-hidden rounded border-2 ${
+                            selected
+                              ? 'border-[#134280] ring-2 ring-[#134280]/30'
+                              : 'border-slate-200 hover:border-slate-400'
+                          }`}
+                          title={m.title}
+                        >
+                          <MediaImage
+                            src={m.url}
+                            alt={m.title}
+                            className="h-full w-full object-cover object-top"
+                          />
+                          {selected && (
+                            <span className="absolute right-0.5 top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#134280] text-white">
+                              <Check className="h-2.5 w-2.5" />
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
               <textarea
                 rows={3}
@@ -2897,12 +3344,24 @@ export function AdminDashboard({
                   onChange={async (ev) => {
                     const f = ev.target.files?.[0];
                     if (!f) return;
-                    const uploaded = await uploadMediaSmart(f, 'docs');
-                    setEditingDoc({
-                      ...editingDoc,
-                      driveFileId: uploaded.driveFileId,
-                      fileUrl: uploaded.url,
-                    });
+                    try {
+                      const uploaded = await uploadMediaSmart(f, 'docs');
+                      setEditingDoc({
+                        ...editingDoc,
+                        driveFileId: uploaded.driveFileId,
+                        fileUrl: uploaded.url,
+                      });
+                    } catch (err) {
+                      setStatusMessage({
+                        type: 'error',
+                        text:
+                          err instanceof Error
+                            ? err.message
+                            : 'Hujjat faylini yuklab bo‘lmadi',
+                      });
+                    } finally {
+                      ev.target.value = '';
+                    }
                   }}
                   className="hidden"
                 />
