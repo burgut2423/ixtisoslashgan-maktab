@@ -1,0 +1,80 @@
+{
+  "entities": {
+    "AdminUser": {
+      "title": "AdminUser",
+      "description": "Authorized Gmail administrator profile for the school portal.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the administrator.",
+          "maxLength": 128
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Verified Gmail address.",
+          "maxLength": 200
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Administrator display name.",
+          "maxLength": 150
+        },
+        "role": {
+          "type": "string",
+          "enum": ["admin"],
+          "description": "Role assigned to the administrator."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when record was updated."
+        }
+      },
+      "required": ["uid", "email", "role", "updatedAt"]
+    },
+    "PortalConfig": {
+      "title": "PortalConfig",
+      "description": "Connected Google Drive and Sheets CMS workspace metadata.",
+      "type": "object",
+      "properties": {
+        "spreadsheetId": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "rootFolderId": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "schoolTitle": {
+          "type": "string",
+          "maxLength": 240
+        },
+        "updatedBy": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["spreadsheetId", "schoolTitle", "updatedBy", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/admins/{adminId}": {
+      "schema": {
+        "$ref": "#/entities/AdminUser"
+      },
+      "description": "Verified school portal administrator accounts."
+    },
+    "/portal_configs/{configId}": {
+      "schema": {
+        "$ref": "#/entities/PortalConfig"
+      },
+      "description": "School portal Google Workspace binding configuration."
+    }
+  }
+}

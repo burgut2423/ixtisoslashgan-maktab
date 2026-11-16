@@ -168,8 +168,8 @@ export default function App() {
     setAdminLoginSession(login);
     if (gmailAuth) {
       setUser(gmailAuth.user);
-      setAccessToken(gmailAuth.accessToken);
-      setNeedsAuth(false);
+      setAccessToken(gmailAuth.accessToken || null);
+      setNeedsAuth(!gmailAuth.accessToken);
     }
   };
 

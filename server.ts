@@ -548,8 +548,8 @@ async function createApp() {
         users?: Array<{ email?: string; emailVerified?: boolean }>;
       };
       const account = verifyJson.users?.[0];
-      if (!account?.email) {
-        res.status(401).json({ error: 'Google hisob email manzili topilmadi' });
+      if (!account?.email || account.emailVerified === false) {
+        res.status(401).json({ error: 'Tasdiqlangan Google email manzili topilmadi' });
         return;
       }
       verifiedEmail = account.email.trim().toLowerCase();
