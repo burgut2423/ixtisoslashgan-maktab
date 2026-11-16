@@ -5,7 +5,7 @@ import {
   GoogleAuthProvider,
   onAuthStateChanged,
 } from 'firebase/auth';
-import type { User } from 'firebase/auth';
+import type { Auth, User } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 export const WORKSPACE_SCOPES = [
@@ -13,8 +13,14 @@ export const WORKSPACE_SCOPES = [
   'https://www.googleapis.com/auth/spreadsheets',
 ] as const;
 
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
-const auth = getAuth(app);
+let auth: Auth | null = null;
+try {
+  const app =
+    getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+  auth = getAuth(app);
+} catch {
+  auth = null;
+}
 
 const provider = new GoogleAuthProvider();
 for (const scope of WORKSPACE_SCOPES) {
@@ -31,6 +37,10 @@ export const initAuth = (
   onAuthSuccess?: (user: User, token: string) => void,
   onAuthFailure?: (user: User | null) => void
 ) => {
+  if (!auth) {
+    onAuthFailure?.(null);
+    return () => {};
+  }
   return onAuthStateChanged(auth, (user: User | null) => {
     if (user) {
       if (cachedAccessToken) {
@@ -50,6 +60,11 @@ export const googleSignIn = async (): Promise<{
   user: User;
   accessToken: string;
 } | null> => {
+  if (!auth) {
+    throw new Error(
+      'Google autentifikatsiyasi ushbu domenda faollashtirilmagan.'
+    );
+  }
   try {
     isSigningIn = true;
     const result = await signInWithPopup(auth, provider);
@@ -69,10 +84,12 @@ export const getAccessToken = (): string | null => {
 };
 
 export const getCurrentUser = (): User | null => {
-  return auth.currentUser;
+  return auth?.currentUser ?? null;
 };
 
 export const logout = async (): Promise<void> => {
-  await auth.signOut();
+  if (auth) {
+    await auth.signOut();
+  }
   cachedAccessToken = null;
 };

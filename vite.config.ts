@@ -5,8 +5,12 @@ import path from 'path';
 import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
-  const rawBase = process.env.VITE_BASE_PATH || '/';
-  const normalizedBase = rawBase.endsWith('/') ? rawBase : `${rawBase}/`;
+  const isGhPages = process.env.GITHUB_PAGES === 'true';
+  const rawBase = process.env.VITE_BASE_PATH || (isGhPages ? './' : '/');
+  const normalizedBase =
+    rawBase === './' || rawBase === '.'
+      ? './'
+      : `/${rawBase.replace(/^\/+|\/+$/g, '')}/`.replace(/^\/\/$/, '/');
 
   return {
     base: normalizedBase,

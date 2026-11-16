@@ -107,8 +107,13 @@ export async function fetchApiOrFallback<T>(
   url: string,
   options?: RequestInit
 ): Promise<{ isBackendAvailable: boolean; response?: Response; data?: T }> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 4000);
   try {
-    const res = await fetch(url, options);
+    const res = await fetch(url, {
+      ...options,
+      signal: options?.signal ?? controller.signal,
+    });
     const contentType = res.headers.get('content-type') || '';
     if (contentType.includes('application/json')) {
       const data = (await res.json()) as T;
@@ -117,6 +122,8 @@ export async function fetchApiOrFallback<T>(
     return { isBackendAvailable: false };
   } catch {
     return { isBackendAvailable: false };
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 

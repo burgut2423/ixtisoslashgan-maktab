@@ -11,8 +11,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
-  Database,
-  ExternalLink,
   FileText,
   GraduationCap,
   Images,
@@ -536,35 +534,6 @@ export function PublicPortal({
         </div>
       </div>
 
-      {/* Drive / Sheets Connection Notice Banner (non-blocking) */}
-      {!loading && !configured && (
-        <div
-          className="border-b"
-          style={{
-            backgroundColor: theme.isDark ? '#1E293B' : '#FFFBEB',
-            borderColor: theme.isDark ? '#334155' : '#FDE68A',
-            color: theme.isDark ? '#FDE68A' : '#78350F',
-          }}
-        >
-          <div className="mx-auto flex max-w-[1280px] flex-wrap items-center justify-between gap-3 px-6 py-2.5 text-xs">
-            <span>
-              {tr(
-                'Hozircha Google Drive va Google Sheets ulanmagan — ma’lumotlar boshlang‘ich bazadan ko‘rsatilmoqda. Google Drive papka va Sheets bazasini ulash uchun Admin panelga kiring.'
-              )}
-            </span>
-            <button
-              type="button"
-              onClick={onOpenAdmin}
-              className="inline-flex items-center gap-1.5 rounded px-3 py-1 font-semibold text-white"
-              style={{ backgroundColor: theme.accent }}
-            >
-              <Database className="h-3.5 w-3.5" />
-              {tr('Drive va Sheets ulash')}
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Main Content */}
       <main id="top">
         {loading && !dataset && (
@@ -685,18 +654,6 @@ export function PublicPortal({
                         <MessageSquare className="h-4 w-4" />
                         {tr('Elektron murojaat')}
                       </a>
-                      {config?.spreadsheetId && (
-                        <a
-                          href={`https://docs.google.com/spreadsheets/d/${config.spreadsheetId}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1.5 text-xs font-medium hover:underline"
-                          style={{ color: theme.textMuted }}
-                        >
-                          <ExternalLink className="h-3.5 w-3.5" />
-                          {tr('Sheets bazasi')}
-                        </a>
-                      )}
                     </div>
                   </div>
 

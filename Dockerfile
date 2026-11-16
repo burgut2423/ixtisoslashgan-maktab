@@ -2,8 +2,8 @@ FROM node:22-alpine
 
 WORKDIR /app
 
-COPY package.json package-lock.json* bun.lock* ./
-RUN npm ci
+COPY package.json package-lock.json* bun.lock* .npmrc* ./
+RUN if [ -f package-lock.json ]; then npm ci --legacy-peer-deps; else npm install --legacy-peer-deps; fi
 
 COPY . .
 
