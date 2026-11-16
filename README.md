@@ -1,11 +1,26 @@
-<div align="center">
+# Qo‘shko‘pir tuman ixtisoslashtirilgan maktab — Rasmiy portal va Admin CMS
 
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+O‘zbekiston Respublikasi davlat ta’lim muassasasi portalining zamonaviy veb-tizimi (Google Drive media ombori + Google Sheets CMS ma’lumotlar bazasi bilan).
 
-  <h1>Built with AI Studio</h2>
+## GitHub orqali avtomatik Deploy qilish
 
-  <p>The fastest path from prompt to production with Gemini.</p>
+### 1. GitHub Pages (Avtomatik GitHub Actions)
+Ushbu repozitoriyda `.github/workflows/deploy.yml` tayyor sozlangan:
+1. Loyihani GitHub (`main` yoki `master` branch) ga yuklang (`git push`).
+2. GitHub repozitoriy sozlamalaridan **Settings → Pages → Build and deployment → Source: GitHub Actions** ni tanlang.
+3. Har safar kod yuklanganda sayt avtomatik build qilinib GitHub Pages’ga deploy qilinadi.
 
-  <a href="https://aistudio.google.com/apps">Start building</a>
+> **Eslatma (Gmail / Google Drive ulanishi uchun):** GitHub Pages domenini (`https://<username>.github.io`) Firebase Console → **Authentication → Settings → Authorized domains** ro‘yxatiga qo‘shib qo‘ying.
 
-</div>
+### 2. Full-Stack Deploy (Render / Railway / Cloud Run / Docker)
+Express backend (`server.ts`) bilan to‘liq ishga tushirish uchun `Dockerfile` va `render.yaml` tayyor:
+- **Render**: GitHub repozitoriyni ulang — `render.yaml` avtomatik build va start buyruqlarini (`npm ci && npm run build`, `node server.ts`) sozlaydi.
+- **Docker**:
+  ```bash
+  docker build -t qoshkopir-im .
+  docker run -p 3000:3000 qoshkopir-im
+  ```
+
+## Admin panelga kirish
+- **Login / Parol:** `ibragim` / `!ibragim@` (yoki Admin → Sozlamalar’dan o‘zgartirish mumkin)
+- **Gmail orqali kirish:** **Admin Panel → Sozlamalar → Gmail orqali Admin kirish ruxsati** bo‘limidan ruxsat etilgan Gmail manzillarini qo‘shish va boshqarish mumkin (Google Sheets `Sozlamalar` jadvalida saqlanadi).

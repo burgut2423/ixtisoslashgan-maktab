@@ -1,0 +1,6 @@
+{
+  "name": "Qo'shko'pir tuman ixtisoslashtirilgan maktab",
+  "description": "Qo'shko'pir tuman ixtisoslashtirilgan maktabining rasmiy veb-sayti va Google Drive hamda Google Sheets asosidagi boshqaruv paneli.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
