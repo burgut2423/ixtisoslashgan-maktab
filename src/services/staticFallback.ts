@@ -107,6 +107,9 @@ export async function fetchApiOrFallback<T>(
   url: string,
   options?: RequestInit
 ): Promise<{ isBackendAvailable: boolean; response?: Response; data?: T }> {
+  if (import.meta.env.VITE_STATIC_MODE === 'true') {
+    return { isBackendAvailable: false };
+  }
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 4000);
   try {

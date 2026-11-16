@@ -42,12 +42,11 @@ jobs:
       - name: Setup GitHub Pages
         id: pages
         uses: actions/configure-pages@v5
-        with:
-          enablement: true
 
       - name: Build production bundle
         env:
           GITHUB_PAGES: 'true'
+          VITE_STATIC_MODE: 'true'
           VITE_BASE_PATH: './'
         run: npm run build
 
