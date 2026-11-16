@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { FormEvent } from 'react';
+import type { CSSProperties, FormEvent } from 'react';
 import {
   ArrowRight,
   Award,
@@ -38,6 +38,7 @@ import type {
   SiteDataset,
 } from '../types/cms';
 import { MediaImage } from './MediaImage';
+import { AnimatedCounter, RevealOnScroll } from './AnimatedCounter';
 import { fetchApiOrFallback, upsertStaticRow } from '../services/staticFallback';
 import {
   convertUzbekAlphabet,
@@ -91,6 +92,7 @@ export function PublicPortal({
     title: string;
     subtitle?: string;
   } | null>(null);
+  const [scrollProgress, setScrollProgress] = useState(0);
 
   // Appeal form state
   const [appealName, setAppealName] = useState('');
@@ -222,6 +224,29 @@ export function PublicPortal({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [lightboxIndex, mediaList.length]);
 
+  // Smooth slim top progress bar tracking scroll depth
+  useEffect(() => {
+    let rafId = 0;
+    const updateProgress = () => {
+      const doc = document.documentElement;
+      const scrollable = doc.scrollHeight - window.innerHeight;
+      const next = scrollable > 0 ? Math.min(1, Math.max(0, window.scrollY / scrollable)) : 0;
+      setScrollProgress(next);
+    };
+    const onScroll = () => {
+      cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(updateProgress);
+    };
+    updateProgress();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll, { passive: true });
+    return () => {
+      cancelAnimationFrame(rafId);
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, []);
+
   const handleNewsPageChange = (nextPage: number) => {
     setNewsPage(nextPage);
     document
@@ -297,14 +322,35 @@ export function PublicPortal({
     filteredNews.length === 0 ? 0 : (safeNewsPage - 1) * NEWS_PAGE_SIZE + 1;
   const endIdx = Math.min(safeNewsPage * NEWS_PAGE_SIZE, filteredNews.length);
 
+  const themeVars = {
+    backgroundColor: theme.bgCanvas,
+    color: theme.textPrimary,
+    '--portal-accent': theme.accent,
+    '--portal-accent-hover': theme.accentHover,
+    '--portal-accent-glow': theme.accentGlow,
+    '--portal-glow-shadow': theme.accentGlowShadow,
+    '--portal-accent-soft': theme.accentSoft,
+  } as CSSProperties;
+
   return (
     <div
       className="min-h-screen transition-colors duration-300"
-      style={{
-        backgroundColor: theme.bgCanvas,
-        color: theme.textPrimary,
-      }}
+      style={themeVars}
     >
+      {/* Slim Top Scroll Progress Bar */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none fixed top-0 right-0 left-0 z-50 h-[3px] bg-transparent"
+      >
+        <div
+          className="h-full w-full origin-left will-change-transform"
+          style={{
+            transform: `scaleX(${scrollProgress})`,
+            background: `linear-gradient(90deg, ${theme.accent}, ${theme.accentGlow})`,
+            boxShadow: scrollProgress > 0.01 ? `0 0 10px ${theme.accentGlowShadow}` : 'none',
+          }}
+        />
+      </div>
       {/* Top 3-Zone Institutional Header */}
       <header
         className="sticky top-0 z-40 border-b backdrop-blur-sm transition-colors duration-300"
@@ -332,35 +378,35 @@ export function PublicPortal({
           >
             <a
               href="#yangiliklar"
-              className="inline-flex items-center gap-1.5 hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
+              className="nav-link-glow inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0"
             >
               <Newspaper className="h-3.5 w-3.5 opacity-75" />
               {tr('Yangiliklar')}
             </a>
             <a
               href="#yonalishlar"
-              className="inline-flex items-center gap-1.5 hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
+              className="nav-link-glow inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0"
             >
               <GraduationCap className="h-3.5 w-3.5 opacity-75" />
               {tr('Yo‘nalishlar')}
             </a>
             <a
               href="#rahbariyat"
-              className="inline-flex items-center gap-1.5 hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
+              className="nav-link-glow inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0"
             >
               <Users className="h-3.5 w-3.5 opacity-75" />
               {tr('Rahbariyat')}
             </a>
             <a
               href="#hujjatlar"
-              className="inline-flex items-center gap-1.5 hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
+              className="nav-link-glow inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0"
             >
               <FileText className="h-3.5 w-3.5 opacity-75" />
               {tr('Hujjatlar')}
             </a>
             <a
               href="#boglanish"
-              className="inline-flex items-center gap-1.5 hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
+              className="nav-link-glow inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0"
             >
               <Phone className="h-3.5 w-3.5 opacity-75" />
               {tr('Bog‘lanish')}
@@ -371,15 +417,14 @@ export function PublicPortal({
             <button
               type="button"
               onClick={onOpenAdmin}
-              className="rounded-md px-4 py-2 text-xs font-semibold text-white transition-colors whitespace-nowrap shrink-0"
-              style={{ backgroundColor: theme.accent }}
+              className="btn-glow-primary rounded-md px-4 py-2 text-xs font-semibold text-white whitespace-nowrap shrink-0"
             >
               {tr('Admin panel')}
             </button>
             <button
               type="button"
               onClick={() => setMobileNavOpen((prev) => !prev)}
-              className="rounded-md border p-2 lg:hidden"
+              className="btn-glow-outline rounded-md border p-2 lg:hidden"
               style={{
                 borderColor: theme.borderSubtle,
                 color: theme.textPrimary,
@@ -455,7 +500,7 @@ export function PublicPortal({
               type="button"
               onClick={onToggleAlphabet}
               title="Alifboni almashtirish (O‘·G‘·Sh·Ch / Ö·Ğ·Ş·Ç)"
-              className="inline-flex items-center gap-1.5 rounded border border-white/25 bg-white/10 px-2.5 py-1 text-xs font-medium text-white hover:bg-white/20 transition-colors whitespace-nowrap"
+              className="btn-glow-ribbon inline-flex items-center gap-1.5 rounded border border-white/25 bg-white/10 px-2.5 py-1 text-xs font-medium text-white whitespace-nowrap"
             >
               <Languages className="h-3.5 w-3.5" />
               <span>
@@ -470,7 +515,7 @@ export function PublicPortal({
               <button
                 type="button"
                 onClick={() => setThemeMenuOpen((prev) => !prev)}
-                className="inline-flex items-center gap-1.5 rounded border border-white/25 bg-white/10 px-2.5 py-1 text-xs font-medium text-white hover:bg-white/20 transition-colors whitespace-nowrap"
+                className="btn-glow-ribbon inline-flex items-center gap-1.5 rounded border border-white/25 bg-white/10 px-2.5 py-1 text-xs font-medium text-white whitespace-nowrap"
               >
                 <Palette className="h-3.5 w-3.5" />
                 <span>{tr(theme.name)}</span>
@@ -568,15 +613,14 @@ export function PublicPortal({
                 <button
                   type="button"
                   onClick={onRefresh}
-                  className="rounded-md px-4 py-2 text-sm font-medium text-white"
-                  style={{ backgroundColor: theme.accent }}
+                  className="btn-glow-primary rounded-md px-4 py-2 text-sm font-medium text-white"
                 >
                   {tr('Qayta urinish')}
                 </button>
                 <button
                   type="button"
                   onClick={onOpenAdmin}
-                  className="rounded-md border px-4 py-2 text-sm font-medium"
+                  className="btn-glow-outline rounded-md border px-4 py-2 text-sm font-medium"
                   style={{ borderColor: theme.borderSubtle }}
                 >
                   {tr('Admin panel')}
@@ -635,8 +679,7 @@ export function PublicPortal({
                     <div className="flex flex-wrap items-center gap-4">
                       <a
                         href="#yonalishlar"
-                        className="inline-flex items-center gap-2 rounded-md px-5 py-2.5 text-sm font-semibold text-white transition-colors whitespace-nowrap"
-                        style={{ backgroundColor: theme.accent }}
+                        className="btn-glow-primary inline-flex items-center gap-2 rounded-md px-5 py-2.5 text-sm font-semibold text-white whitespace-nowrap"
                       >
                         <GraduationCap className="h-4 w-4" />
                         {tr('Ta’lim yo‘nalishlari')}
@@ -644,7 +687,7 @@ export function PublicPortal({
                       </a>
                       <a
                         href="#boglanish"
-                        className="inline-flex items-center gap-2 rounded-md border px-5 py-2.5 text-sm font-semibold transition-colors whitespace-nowrap"
+                        className="btn-glow-outline inline-flex items-center gap-2 rounded-md border px-5 py-2.5 text-sm font-semibold whitespace-nowrap"
                         style={{
                           borderColor: theme.borderSubtle,
                           backgroundColor: theme.bgSurfaceAlt,
@@ -699,197 +742,201 @@ export function PublicPortal({
                 </div>
 
                 {/* Quick Services Strip (gov.uz interactive tiles with icons) */}
-                <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                  <a
-                    href="#yonalishlar"
-                    className="w3-card-elevate flex items-start gap-3.5 rounded-lg border p-4"
-                    style={{
-                      backgroundColor: theme.bgSurfaceAlt,
-                      borderColor: theme.borderSubtle,
-                    }}
-                  >
-                    <div
-                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md"
+                <RevealOnScroll delayMs={60}>
+                  <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    <a
+                      href="#yonalishlar"
+                      className="w3-card-elevate flex items-start gap-3.5 rounded-lg border p-4"
                       style={{
-                        backgroundColor: theme.accentSoft,
-                        color: theme.isDark ? '#60A5FA' : theme.accent,
+                        backgroundColor: theme.bgSurfaceAlt,
+                        borderColor: theme.borderSubtle,
                       }}
                     >
-                      <GraduationCap className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold">
-                        {tr('Qabul va yo‘nalishlar')}
-                      </p>
-                      <p
-                        className="mt-0.5 text-xs"
-                        style={{ color: theme.textMuted }}
+                      <div
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md"
+                        style={{
+                          backgroundColor: theme.accentSoft,
+                          color: theme.isDark ? '#60A5FA' : theme.accent,
+                        }}
                       >
-                        {tr('Sinov fanlari va qabul kvotalari')}
-                      </p>
-                    </div>
-                  </a>
-                  <a
-                    href="#hujjatlar"
-                    className="w3-card-elevate flex items-start gap-3.5 rounded-lg border p-4"
-                    style={{
-                      backgroundColor: theme.bgSurfaceAlt,
-                      borderColor: theme.borderSubtle,
-                    }}
-                  >
-                    <div
-                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md"
+                        <GraduationCap className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold">
+                          {tr('Qabul va yo‘nalishlar')}
+                        </p>
+                        <p
+                          className="mt-0.5 text-xs"
+                          style={{ color: theme.textMuted }}
+                        >
+                          {tr('Sinov fanlari va qabul kvotalari')}
+                        </p>
+                      </div>
+                    </a>
+                    <a
+                      href="#hujjatlar"
+                      className="w3-card-elevate flex items-start gap-3.5 rounded-lg border p-4"
                       style={{
-                        backgroundColor: theme.accentSoft,
-                        color: theme.isDark ? '#60A5FA' : theme.accent,
+                        backgroundColor: theme.bgSurfaceAlt,
+                        borderColor: theme.borderSubtle,
                       }}
                     >
-                      <FileText className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold">
-                        {tr('Me’yoriy hujjatlar')}
-                      </p>
-                      <p
-                        className="mt-0.5 text-xs"
-                        style={{ color: theme.textMuted }}
+                      <div
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md"
+                        style={{
+                          backgroundColor: theme.accentSoft,
+                          color: theme.isDark ? '#60A5FA' : theme.accent,
+                        }}
                       >
-                        {tr('Ustav, reglament va ochiq hisobotlar')}
-                      </p>
-                    </div>
-                  </a>
-                  <a
-                    href="#rahbariyat"
-                    className="w3-card-elevate flex items-start gap-3.5 rounded-lg border p-4"
-                    style={{
-                      backgroundColor: theme.bgSurfaceAlt,
-                      borderColor: theme.borderSubtle,
-                    }}
-                  >
-                    <div
-                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md"
+                        <FileText className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold">
+                          {tr('Me’yoriy hujjatlar')}
+                        </p>
+                        <p
+                          className="mt-0.5 text-xs"
+                          style={{ color: theme.textMuted }}
+                        >
+                          {tr('Ustav, reglament va ochiq hisobotlar')}
+                        </p>
+                      </div>
+                    </a>
+                    <a
+                      href="#rahbariyat"
+                      className="w3-card-elevate flex items-start gap-3.5 rounded-lg border p-4"
                       style={{
-                        backgroundColor: theme.accentSoft,
-                        color: theme.isDark ? '#60A5FA' : theme.accent,
+                        backgroundColor: theme.bgSurfaceAlt,
+                        borderColor: theme.borderSubtle,
                       }}
                     >
-                      <UserCheck className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold">
-                        {tr('Rahbariyat qabuli')}
-                      </p>
-                      <p
-                        className="mt-0.5 text-xs"
-                        style={{ color: theme.textMuted }}
+                      <div
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md"
+                        style={{
+                          backgroundColor: theme.accentSoft,
+                          color: theme.isDark ? '#60A5FA' : theme.accent,
+                        }}
                       >
-                        {tr('Qabul kunlari va aloqa raqamlari')}
-                      </p>
-                    </div>
-                  </a>
-                  <a
-                    href="#boglanish"
-                    className="w3-card-elevate flex items-start gap-3.5 rounded-lg border p-4"
-                    style={{
-                      backgroundColor: theme.bgSurfaceAlt,
-                      borderColor: theme.borderSubtle,
-                    }}
-                  >
-                    <div
-                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md"
+                        <UserCheck className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold">
+                          {tr('Rahbariyat qabuli')}
+                        </p>
+                        <p
+                          className="mt-0.5 text-xs"
+                          style={{ color: theme.textMuted }}
+                        >
+                          {tr('Qabul kunlari va aloqa raqamlari')}
+                        </p>
+                      </div>
+                    </a>
+                    <a
+                      href="#boglanish"
+                      className="w3-card-elevate flex items-start gap-3.5 rounded-lg border p-4"
                       style={{
-                        backgroundColor: theme.accentSoft,
-                        color: theme.isDark ? '#60A5FA' : theme.accent,
+                        backgroundColor: theme.bgSurfaceAlt,
+                        borderColor: theme.borderSubtle,
                       }}
                     >
-                      <MessageSquare className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold">
-                        {tr('Elektron murojaat')}
-                      </p>
-                      <p
-                        className="mt-0.5 text-xs"
-                        style={{ color: theme.textMuted }}
+                      <div
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md"
+                        style={{
+                          backgroundColor: theme.accentSoft,
+                          color: theme.isDark ? '#60A5FA' : theme.accent,
+                        }}
                       >
-                        {tr('Ota-onalar va fuqarolar murojaatxonasi')}
-                      </p>
-                    </div>
-                  </a>
-                </div>
+                        <MessageSquare className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold">
+                          {tr('Elektron murojaat')}
+                        </p>
+                        <p
+                          className="mt-0.5 text-xs"
+                          style={{ color: theme.textMuted }}
+                        >
+                          {tr('Ota-onalar va fuqarolar murojaatxonasi')}
+                        </p>
+                      </div>
+                    </a>
+                  </div>
+                </RevealOnScroll>
 
-                {/* 4-Column Full-Width Tabular Metrics Strip with Icons */}
-                <div
-                  className="mt-8 grid grid-cols-2 divide-y rounded-lg border sm:grid-cols-4 sm:divide-x sm:divide-y-0"
-                  style={{
-                    backgroundColor: theme.bgSurfaceAlt,
-                    borderColor: theme.borderSubtle,
-                  }}
-                >
+                {/* 4-Column Full-Width Tabular Metrics Strip with Animated Number Writing */}
+                <RevealOnScroll delayMs={140}>
                   <div
-                    className="px-6 py-5"
-                    style={{ borderColor: theme.borderSubtle }}
+                    className="mt-8 grid grid-cols-2 divide-y rounded-lg border sm:grid-cols-4 sm:divide-x sm:divide-y-0"
+                    style={{
+                      backgroundColor: theme.bgSurfaceAlt,
+                      borderColor: theme.borderSubtle,
+                    }}
                   >
                     <div
-                      className="flex items-center gap-2 text-xs font-medium"
-                      style={{ color: theme.textMuted }}
+                      className="px-6 py-5"
+                      style={{ borderColor: theme.borderSubtle }}
                     >
-                      <Users className="h-4 w-4" />
-                      <span>{tr('O‘quvchilar soni')}</span>
+                      <div
+                        className="flex items-center gap-2 text-xs font-medium"
+                        style={{ color: theme.textMuted }}
+                      >
+                        <Users className="h-4 w-4" />
+                        <span>{tr('O‘quvchilar soni')}</span>
+                      </div>
+                      <p className="mt-2 font-mono-tabular text-2xl font-semibold lg:text-3xl">
+                        <AnimatedCounter value={settings.students_count} />
+                      </p>
                     </div>
-                    <p className="mt-2 font-mono-tabular text-2xl font-semibold lg:text-3xl">
-                      {settings.students_count || '—'}
-                    </p>
-                  </div>
-                  <div
-                    className="px-6 py-5"
-                    style={{ borderColor: theme.borderSubtle }}
-                  >
                     <div
-                      className="flex items-center gap-2 text-xs font-medium"
-                      style={{ color: theme.textMuted }}
+                      className="px-6 py-5"
+                      style={{ borderColor: theme.borderSubtle }}
                     >
-                      <UserCheck className="h-4 w-4" />
-                      <span>{tr('Pedagoglar tarkibi')}</span>
+                      <div
+                        className="flex items-center gap-2 text-xs font-medium"
+                        style={{ color: theme.textMuted }}
+                      >
+                        <UserCheck className="h-4 w-4" />
+                        <span>{tr('Pedagoglar tarkibi')}</span>
+                      </div>
+                      <p className="mt-2 font-mono-tabular text-2xl font-semibold lg:text-3xl">
+                        <AnimatedCounter value={settings.teachers_count} durationMs={1000} />
+                      </p>
                     </div>
-                    <p className="mt-2 font-mono-tabular text-2xl font-semibold lg:text-3xl">
-                      {settings.teachers_count || '—'}
-                    </p>
-                  </div>
-                  <div
-                    className="px-6 py-5"
-                    style={{ borderColor: theme.borderSubtle }}
-                  >
                     <div
-                      className="flex items-center gap-2 text-xs font-medium"
-                      style={{ color: theme.textMuted }}
+                      className="px-6 py-5"
+                      style={{ borderColor: theme.borderSubtle }}
                     >
-                      <Award className="h-4 w-4" />
-                      <span>{tr('Olimpiada g‘oliblari')}</span>
+                      <div
+                        className="flex items-center gap-2 text-xs font-medium"
+                        style={{ color: theme.textMuted }}
+                      >
+                        <Award className="h-4 w-4" />
+                        <span>{tr('Olimpiada g‘oliblari')}</span>
+                      </div>
+                      <p className="mt-2 font-mono-tabular text-2xl font-semibold lg:text-3xl">
+                        <AnimatedCounter value={settings.olympiad_winners} durationMs={1100} />
+                      </p>
                     </div>
-                    <p className="mt-2 font-mono-tabular text-2xl font-semibold lg:text-3xl">
-                      {settings.olympiad_winners || '—'}
-                    </p>
-                  </div>
-                  <div
-                    className="px-6 py-5"
-                    style={{ borderColor: theme.borderSubtle }}
-                  >
                     <div
-                      className="flex items-center gap-2 text-xs font-medium"
-                      style={{ color: theme.textMuted }}
+                      className="px-6 py-5"
+                      style={{ borderColor: theme.borderSubtle }}
                     >
-                      <TrendingUp className="h-4 w-4" />
-                      <span>{tr('OTMga kirish ko‘rsatkichi')}</span>
+                      <div
+                        className="flex items-center gap-2 text-xs font-medium"
+                        style={{ color: theme.textMuted }}
+                      >
+                        <TrendingUp className="h-4 w-4" />
+                        <span>{tr('OTMga kirish ko‘rsatkichi')}</span>
+                      </div>
+                      <p
+                        className="mt-2 font-mono-tabular text-2xl font-semibold lg:text-3xl"
+                        style={{ color: theme.isDark ? '#60A5FA' : theme.accent }}
+                      >
+                        <AnimatedCounter value={settings.university_rate} durationMs={1250} />
+                      </p>
                     </div>
-                    <p
-                      className="mt-2 font-mono-tabular text-2xl font-semibold lg:text-3xl"
-                      style={{ color: theme.isDark ? '#60A5FA' : theme.accent }}
-                    >
-                      {settings.university_rate || '—'}
-                    </p>
                   </div>
-                </div>
+                </RevealOnScroll>
               </div>
             </section>
 
@@ -940,7 +987,7 @@ export function PublicPortal({
                         key={cat}
                         type="button"
                         onClick={() => setNewsCategory(cat)}
-                        className="rounded px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0"
+                        className="btn-glow-outline rounded border border-transparent px-3 py-1.5 text-xs font-medium whitespace-nowrap shrink-0"
                         style={{
                           backgroundColor:
                             newsCategory === cat
@@ -975,8 +1022,7 @@ export function PublicPortal({
                   <button
                     type="button"
                     onClick={onOpenAdmin}
-                    className="mt-4 rounded-md px-4 py-2 text-xs font-semibold text-white"
-                    style={{ backgroundColor: theme.accent }}
+                    className="btn-glow-primary mt-4 rounded-md px-4 py-2 text-xs font-semibold text-white"
                   >
                     {tr('Admin paneldan qo‘shish')}
                   </button>
@@ -984,83 +1030,89 @@ export function PublicPortal({
               ) : (
                 <div className="mt-8 space-y-10">
                   {leadStory && (
-                    <article
-                      onClick={() => setActiveArticle(leadStory)}
-                      className="w3-card-elevate group grid cursor-pointer items-stretch overflow-hidden rounded-lg border lg:grid-cols-12"
-                      style={{
-                        backgroundColor: theme.bgSurface,
-                        borderColor: theme.borderSubtle,
-                      }}
-                    >
-                      <div
-                        className="relative h-64 overflow-hidden lg:col-span-6 lg:h-auto lg:min-h-[300px]"
-                        style={{ backgroundColor: theme.bgSurfaceAlt }}
+                    <RevealOnScroll delayMs={40}>
+                      <article
+                        onClick={() => setActiveArticle(leadStory)}
+                        className="w3-card-elevate group grid cursor-pointer items-stretch overflow-hidden rounded-lg border lg:grid-cols-12"
+                        style={{
+                          backgroundColor: theme.bgSurface,
+                          borderColor: theme.borderSubtle,
+                        }}
                       >
-                        <MediaImage
-                          src={leadStory.imageUrl}
-                          alt={tr(leadStory.title)}
-                          className="w3-img-hover h-full w-full object-cover"
-                          fallbackTitle={tr(leadStory.title)}
-                        />
-                        <span className="pointer-events-none absolute right-3 bottom-3 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-                          <ZoomIn className="h-4 w-4" />
-                        </span>
-                      </div>
-                      <div className="flex flex-col justify-between p-6 lg:col-span-6 lg:p-8">
-                        <div>
-                          <div
-                            className="flex items-center gap-2 text-xs"
-                            style={{ color: theme.textMuted }}
-                          >
-                            <span
-                              className="font-semibold"
-                              style={{
-                                color: theme.isDark ? '#60A5FA' : theme.accent,
-                              }}
-                            >
-                              {tr(leadStory.category)}
-                            </span>
-                            <span aria-hidden="true">·</span>
-                            <span className="inline-flex items-center gap-1 font-mono-tabular">
-                              <Calendar className="h-3 w-3" />
-                              {leadStory.date}
-                            </span>
-                          </div>
-                          <h3 className="mt-3 font-serif-editorial text-2xl font-bold leading-snug">
-                            {tr(leadStory.title)}
-                          </h3>
-                          <p
-                            className="mt-3 text-sm leading-relaxed line-clamp-4"
-                            style={{ color: theme.textSecondary }}
-                          >
-                            {tr(leadStory.summary)}
-                          </p>
-                        </div>
                         <div
-                          className="mt-6 inline-flex items-center gap-1.5 text-sm font-semibold"
-                          style={{
-                            color: theme.isDark ? '#60A5FA' : theme.accent,
-                          }}
+                          className="relative h-64 overflow-hidden lg:col-span-6 lg:h-auto lg:min-h-[300px]"
+                          style={{ backgroundColor: theme.bgSurfaceAlt }}
                         >
-                          {tr('Batafsil o‘qish')}
-                          <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
+                          <MediaImage
+                            src={leadStory.imageUrl}
+                            alt={tr(leadStory.title)}
+                            className="w3-img-hover h-full w-full object-cover"
+                            fallbackTitle={tr(leadStory.title)}
+                          />
+                          <span className="pointer-events-none absolute right-3 bottom-3 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+                            <ZoomIn className="h-4 w-4" />
+                          </span>
                         </div>
-                      </div>
-                    </article>
+                        <div className="flex flex-col justify-between p-6 lg:col-span-6 lg:p-8">
+                          <div>
+                            <div
+                              className="flex items-center gap-2 text-xs"
+                              style={{ color: theme.textMuted }}
+                            >
+                              <span
+                                className="font-semibold"
+                                style={{
+                                  color: theme.isDark ? '#60A5FA' : theme.accent,
+                                }}
+                              >
+                                {tr(leadStory.category)}
+                              </span>
+                              <span aria-hidden="true">·</span>
+                              <span className="inline-flex items-center gap-1 font-mono-tabular">
+                                <Calendar className="h-3 w-3" />
+                                {leadStory.date}
+                              </span>
+                            </div>
+                            <h3 className="mt-3 font-serif-editorial text-2xl font-bold leading-snug">
+                              {tr(leadStory.title)}
+                            </h3>
+                            <p
+                              className="mt-3 text-sm leading-relaxed line-clamp-4"
+                              style={{ color: theme.textSecondary }}
+                            >
+                              {tr(leadStory.summary)}
+                            </p>
+                          </div>
+                          <div
+                            className="mt-6 inline-flex items-center gap-1.5 text-sm font-semibold"
+                            style={{
+                              color: theme.isDark ? '#60A5FA' : theme.accent,
+                            }}
+                          >
+                            {tr('Batafsil o‘qish')}
+                            <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
+                          </div>
+                        </div>
+                      </article>
+                    </RevealOnScroll>
                   )}
 
                   {secondaryStories.length > 0 && (
                     <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                      {secondaryStories.map((item) => (
-                        <article
+                      {secondaryStories.map((item, idx) => (
+                        <RevealOnScroll
                           key={item.id}
-                          onClick={() => setActiveArticle(item)}
-                          className="w3-card-elevate group flex cursor-pointer flex-col overflow-hidden rounded-lg border"
-                          style={{
-                            backgroundColor: theme.bgSurface,
-                            borderColor: theme.borderSubtle,
-                          }}
+                          delayMs={Math.min(idx * 65, 260)}
+                          className="flex"
                         >
+                          <article
+                            onClick={() => setActiveArticle(item)}
+                            className="w3-card-elevate group flex w-full cursor-pointer flex-col overflow-hidden rounded-lg border"
+                            style={{
+                              backgroundColor: theme.bgSurface,
+                              borderColor: theme.borderSubtle,
+                            }}
+                          >
                           <div
                             className="relative aspect-[4/3] w-full overflow-hidden"
                             style={{ backgroundColor: theme.bgSurfaceAlt }}
@@ -1118,6 +1170,7 @@ export function PublicPortal({
                             </div>
                           </div>
                         </article>
+                        </RevealOnScroll>
                       ))}
                     </div>
                   )}
@@ -1141,7 +1194,7 @@ export function PublicPortal({
                         type="button"
                         disabled={safeNewsPage <= 1}
                         onClick={() => handleNewsPageChange(safeNewsPage - 1)}
-                        className="inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-medium disabled:opacity-40"
+                        className="btn-glow-outline inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-medium disabled:opacity-40"
                         style={{
                           backgroundColor: theme.bgSurface,
                           borderColor: theme.borderSubtle,
@@ -1160,7 +1213,11 @@ export function PublicPortal({
                           key={pageNum}
                           type="button"
                           onClick={() => handleNewsPageChange(pageNum)}
-                          className="h-8 min-w-[32px] rounded-md border px-2 font-mono-tabular text-xs font-semibold transition-colors"
+                          className={`h-8 min-w-[32px] rounded-md border px-2 font-mono-tabular text-xs font-semibold ${
+                            pageNum === safeNewsPage
+                              ? 'btn-glow-primary'
+                              : 'btn-glow-outline'
+                          }`}
                           style={{
                             backgroundColor:
                               pageNum === safeNewsPage
@@ -1184,7 +1241,7 @@ export function PublicPortal({
                         type="button"
                         disabled={safeNewsPage >= totalNewsPages}
                         onClick={() => handleNewsPageChange(safeNewsPage + 1)}
-                        className="inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-medium disabled:opacity-40"
+                        className="btn-glow-outline inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-medium disabled:opacity-40"
                         style={{
                           backgroundColor: theme.bgSurface,
                           borderColor: theme.borderSubtle,
@@ -1238,63 +1295,72 @@ export function PublicPortal({
                   </div>
                 ) : (
                   <div className="mt-8 grid gap-6 md:grid-cols-2">
-                    {dataset.programs.map((prog) => (
-                      <div
+                    {dataset.programs.map((prog, idx) => (
+                      <RevealOnScroll
                         key={prog.id}
-                        className="w3-card-elevate flex flex-col justify-between rounded-lg border p-6"
-                        style={{
-                          backgroundColor: theme.bgSurfaceAlt,
-                          borderColor: theme.borderSubtle,
-                        }}
+                        delayMs={Math.min(idx * 75, 250)}
+                        className="flex"
                       >
-                        <div>
+                        <div
+                          className="w3-card-elevate flex w-full flex-col justify-between rounded-lg border p-6"
+                          style={{
+                            backgroundColor: theme.bgSurfaceAlt,
+                            borderColor: theme.borderSubtle,
+                          }}
+                        >
+                          <div>
+                            <div
+                              className="flex items-center justify-between gap-4 border-b pb-3 text-xs"
+                              style={{
+                                borderColor: theme.borderSubtle,
+                                color: theme.textMuted,
+                              }}
+                            >
+                              <span
+                                className="font-mono-tabular font-semibold"
+                                style={{
+                                  color: theme.isDark ? '#60A5FA' : theme.accent,
+                                }}
+                              >
+                                {prog.code} · {tr(prog.gradeRange)}
+                              </span>
+                              <span className="font-mono-tabular font-medium">
+                                {tr('Kvota:')}{' '}
+                                <AnimatedCounter
+                                  value={tr(prog.quota)}
+                                  durationMs={950}
+                                />
+                              </span>
+                            </div>
+                            <h3 className="mt-4 text-lg font-semibold">
+                              {tr(prog.title)}
+                            </h3>
+                            <p
+                              className="mt-2 text-sm leading-relaxed"
+                              style={{ color: theme.textSecondary }}
+                            >
+                              {tr(prog.description)}
+                            </p>
+                          </div>
                           <div
-                            className="flex items-center justify-between gap-4 border-b pb-3 text-xs"
+                            className="mt-5 flex items-center gap-2 border-t pt-3 text-xs"
                             style={{
                               borderColor: theme.borderSubtle,
-                              color: theme.textMuted,
+                              color: theme.textSecondary,
                             }}
                           >
-                            <span
-                              className="font-mono-tabular font-semibold"
+                            <BookOpen
+                              className="h-4 w-4 shrink-0"
                               style={{
                                 color: theme.isDark ? '#60A5FA' : theme.accent,
                               }}
-                            >
-                              {prog.code} · {tr(prog.gradeRange)}
-                            </span>
-                            <span className="font-mono-tabular font-medium">
-                              {tr(`Kvota: ${prog.quota}`)}
+                            />
+                            <span>
+                              {tr(`Chuqurlashtirilgan fanlar: ${prog.subjects}`)}
                             </span>
                           </div>
-                          <h3 className="mt-4 text-lg font-semibold">
-                            {tr(prog.title)}
-                          </h3>
-                          <p
-                            className="mt-2 text-sm leading-relaxed"
-                            style={{ color: theme.textSecondary }}
-                          >
-                            {tr(prog.description)}
-                          </p>
                         </div>
-                        <div
-                          className="mt-5 flex items-center gap-2 border-t pt-3 text-xs"
-                          style={{
-                            borderColor: theme.borderSubtle,
-                            color: theme.textSecondary,
-                          }}
-                        >
-                          <BookOpen
-                            className="h-4 w-4 shrink-0"
-                            style={{
-                              color: theme.isDark ? '#60A5FA' : theme.accent,
-                            }}
-                          />
-                          <span>
-                            {tr(`Chuqurlashtirilgan fanlar: ${prog.subjects}`)}
-                          </span>
-                        </div>
-                      </div>
+                      </RevealOnScroll>
                     ))}
                   </div>
                 )}
@@ -1329,92 +1395,97 @@ export function PublicPortal({
                 </div>
               ) : (
                 <div className="mt-8 grid gap-6 md:grid-cols-3">
-                  {sortedLeadership.map((member) => (
-                    <div
+                  {sortedLeadership.map((member, idx) => (
+                    <RevealOnScroll
                       key={member.id}
-                      className="w3-card-elevate group flex flex-col overflow-hidden rounded-lg border"
-                      style={{
-                        backgroundColor: theme.bgSurface,
-                        borderColor: theme.borderSubtle,
-                      }}
+                      delayMs={Math.min(idx * 80, 260)}
+                      className="flex"
                     >
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setCustomLightbox({
-                            url: member.imageUrl,
-                            title: member.fullName,
-                            subtitle: member.role,
-                          })
-                        }
-                        className="relative aspect-[4/3] w-full overflow-hidden text-left"
-                        style={{ backgroundColor: theme.bgSurfaceAlt }}
+                      <div
+                        className="w3-card-elevate group flex w-full flex-col overflow-hidden rounded-lg border"
+                        style={{
+                          backgroundColor: theme.bgSurface,
+                          borderColor: theme.borderSubtle,
+                        }}
                       >
-                        <MediaImage
-                          src={member.imageUrl}
-                          alt={tr(member.fullName)}
-                          className="w3-img-hover h-full w-full object-cover object-top"
-                          fallbackTitle={tr(member.fullName)}
-                        />
-                        <span className="pointer-events-none absolute right-3 bottom-3 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-                          <ZoomIn className="h-4 w-4" />
-                        </span>
-                      </button>
-                      <div className="flex flex-1 flex-col justify-between p-5">
-                        <div>
-                          <p
-                            className="text-xs font-medium"
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setCustomLightbox({
+                              url: member.imageUrl,
+                              title: member.fullName,
+                              subtitle: member.role,
+                            })
+                          }
+                          className="relative aspect-[4/3] w-full overflow-hidden text-left"
+                          style={{ backgroundColor: theme.bgSurfaceAlt }}
+                        >
+                          <MediaImage
+                            src={member.imageUrl}
+                            alt={tr(member.fullName)}
+                            className="w3-img-hover h-full w-full object-cover object-top"
+                            fallbackTitle={tr(member.fullName)}
+                          />
+                          <span className="pointer-events-none absolute right-3 bottom-3 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+                            <ZoomIn className="h-4 w-4" />
+                          </span>
+                        </button>
+                        <div className="flex flex-1 flex-col justify-between p-5">
+                          <div>
+                            <p
+                              className="text-xs font-medium"
+                              style={{
+                                color: theme.isDark ? '#60A5FA' : theme.accent,
+                              }}
+                            >
+                              {tr(member.role)}
+                            </p>
+                            <h3 className="mt-1 text-base font-semibold">
+                              {tr(member.fullName)}
+                            </h3>
+                            <p
+                              className="mt-2.5 text-sm leading-relaxed"
+                              style={{ color: theme.textSecondary }}
+                            >
+                              {tr(member.bio)}
+                            </p>
+                          </div>
+                          <dl
+                            className="mt-5 space-y-1.5 border-t pt-3 text-xs"
                             style={{
-                              color: theme.isDark ? '#60A5FA' : theme.accent,
+                              borderColor: theme.borderSubtle,
+                              color: theme.textSecondary,
                             }}
                           >
-                            {tr(member.role)}
-                          </p>
-                          <h3 className="mt-1 text-base font-semibold">
-                            {tr(member.fullName)}
-                          </h3>
-                          <p
-                            className="mt-2.5 text-sm leading-relaxed"
-                            style={{ color: theme.textSecondary }}
-                          >
-                            {tr(member.bio)}
-                          </p>
-                        </div>
-                        <dl
-                          className="mt-5 space-y-1.5 border-t pt-3 text-xs"
-                          style={{
-                            borderColor: theme.borderSubtle,
-                            color: theme.textSecondary,
-                          }}
-                        >
-                          <div className="flex items-center gap-2">
-                            <Calendar
-                              className="h-3.5 w-3.5 shrink-0"
-                              style={{ color: theme.textMuted }}
-                            />
-                            <span>
-                              {tr(`Qabul: ${member.receptionHours}`)}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2 font-mono-tabular">
-                            <Phone
-                              className="h-3.5 w-3.5 shrink-0"
-                              style={{ color: theme.textMuted }}
-                            />
-                            <span>{member.phone}</span>
-                          </div>
-                          {member.email && (
                             <div className="flex items-center gap-2">
-                              <Mail
+                              <Calendar
                                 className="h-3.5 w-3.5 shrink-0"
                                 style={{ color: theme.textMuted }}
                               />
-                              <span>{member.email}</span>
+                              <span>
+                                {tr(`Qabul: ${member.receptionHours}`)}
+                              </span>
                             </div>
-                          )}
-                        </dl>
+                            <div className="flex items-center gap-2 font-mono-tabular">
+                              <Phone
+                                className="h-3.5 w-3.5 shrink-0"
+                                style={{ color: theme.textMuted }}
+                              />
+                              <span>{member.phone}</span>
+                            </div>
+                            {member.email && (
+                              <div className="flex items-center gap-2">
+                                <Mail
+                                  className="h-3.5 w-3.5 shrink-0"
+                                  style={{ color: theme.textMuted }}
+                                />
+                                <span>{member.email}</span>
+                              </div>
+                            )}
+                          </dl>
+                        </div>
                       </div>
-                    </div>
+                    </RevealOnScroll>
                   ))}
                 </div>
               )}
@@ -1453,7 +1524,7 @@ export function PublicPortal({
                         key={cat}
                         type="button"
                         onClick={() => setDocCategory(cat)}
-                        className="rounded px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0"
+                        className="btn-glow-outline rounded border border-transparent px-3 py-1.5 text-xs font-medium whitespace-nowrap shrink-0"
                         style={{
                           backgroundColor:
                             docCategory === cat
@@ -1471,10 +1542,11 @@ export function PublicPortal({
                   </div>
                 </div>
 
-                <div
-                  className="mt-8 overflow-x-auto rounded-lg border"
-                  style={{ borderColor: theme.borderSubtle }}
-                >
+                <RevealOnScroll delayMs={60}>
+                  <div
+                    className="mt-8 overflow-x-auto rounded-lg border"
+                    style={{ borderColor: theme.borderSubtle }}
+                  >
                   <table className="w-full border-collapse text-left text-sm">
                     <thead>
                       <tr
@@ -1569,6 +1641,7 @@ export function PublicPortal({
                     </tbody>
                   </table>
                 </div>
+                </RevealOnScroll>
               </div>
             </section>
 
@@ -1590,47 +1663,52 @@ export function PublicPortal({
 
                 <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
                   {mediaList.map((item, idx) => (
-                    <button
+                    <RevealOnScroll
                       key={item.id}
-                      type="button"
-                      onClick={() => setLightboxIndex(idx)}
-                      className="w3-card-elevate group flex flex-col overflow-hidden rounded-lg border text-left"
-                      style={{
-                        backgroundColor: theme.bgSurface,
-                        borderColor: theme.borderSubtle,
-                      }}
+                      delayMs={Math.min(idx * 65, 260)}
+                      className="flex"
                     >
-                      <div
-                        className="relative aspect-[4/3] w-full overflow-hidden"
-                        style={{ backgroundColor: theme.bgSurfaceAlt }}
+                      <button
+                        type="button"
+                        onClick={() => setLightboxIndex(idx)}
+                        className="w3-card-elevate group flex w-full flex-col overflow-hidden rounded-lg border text-left"
+                        style={{
+                          backgroundColor: theme.bgSurface,
+                          borderColor: theme.borderSubtle,
+                        }}
                       >
-                        <MediaImage
-                          src={item.url}
-                          alt={tr(item.title)}
-                          className="w3-img-hover h-full w-full object-cover"
-                          fallbackTitle={tr(item.title)}
-                        />
-                        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/35 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-                          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/95 text-slate-900 shadow-lg transition-transform duration-300 group-hover:scale-110">
-                            <ZoomIn className="h-5 w-5" />
-                          </span>
-                        </div>
-                      </div>
-                      <div className="p-3.5">
-                        <p
-                          className="text-xs"
-                          style={{ color: theme.textMuted }}
+                        <div
+                          className="relative aspect-[4/3] w-full overflow-hidden"
+                          style={{ backgroundColor: theme.bgSurfaceAlt }}
                         >
-                          {tr(item.category)} ·{' '}
-                          <span className="font-mono-tabular">
-                            {item.createdAt}
-                          </span>
-                        </p>
-                        <p className="mt-1 text-sm font-medium line-clamp-1">
-                          {tr(item.title)}
-                        </p>
-                      </div>
-                    </button>
+                          <MediaImage
+                            src={item.url}
+                            alt={tr(item.title)}
+                            className="w3-img-hover h-full w-full object-cover"
+                            fallbackTitle={tr(item.title)}
+                          />
+                          <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/35 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+                            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/95 text-slate-900 shadow-lg transition-transform duration-300 group-hover:scale-110">
+                              <ZoomIn className="h-5 w-5" />
+                            </span>
+                          </div>
+                        </div>
+                        <div className="p-3.5">
+                          <p
+                            className="text-xs"
+                            style={{ color: theme.textMuted }}
+                          >
+                            {tr(item.category)} ·{' '}
+                            <span className="font-mono-tabular">
+                              {item.createdAt}
+                            </span>
+                          </p>
+                          <p className="mt-1 text-sm font-medium line-clamp-1">
+                            {tr(item.title)}
+                          </p>
+                        </div>
+                      </button>
+                    </RevealOnScroll>
                   ))}
                 </div>
               </section>
@@ -1877,8 +1955,7 @@ export function PublicPortal({
                       <button
                         type="submit"
                         disabled={appealSubmitting}
-                        className="inline-flex items-center gap-2 rounded-md px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
-                        style={{ backgroundColor: theme.accent }}
+                        className="btn-glow-primary inline-flex items-center gap-2 rounded-md px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
                       >
                         <Send className="h-4 w-4" />
                         {appealSubmitting
@@ -2083,7 +2160,7 @@ export function PublicPortal({
                           : (prev - 1 + mediaList.length) % mediaList.length
                       )
                     }
-                    className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-black/60 p-2.5 text-white hover:bg-black/80"
+                    className="btn-glow-ribbon absolute left-3 top-1/2 -translate-y-1/2 rounded-full border border-white/25 bg-black/60 p-2.5 text-white"
                     aria-label="Oldingi rasm"
                   >
                     <ChevronLeft className="h-5 w-5" />
@@ -2095,7 +2172,7 @@ export function PublicPortal({
                         prev === null ? 0 : (prev + 1) % mediaList.length
                       )
                     }
-                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-black/60 p-2.5 text-white hover:bg-black/80"
+                    className="btn-glow-ribbon absolute right-3 top-1/2 -translate-y-1/2 rounded-full border border-white/25 bg-black/60 p-2.5 text-white"
                     aria-label="Keyingi rasm"
                   >
                     <ChevronRight className="h-5 w-5" />

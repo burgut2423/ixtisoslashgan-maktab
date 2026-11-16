@@ -20,6 +20,8 @@ export interface PortalTheme {
   textMuted: string;
   accent: string;
   accentHover: string;
+  accentGlow: string;
+  accentGlowShadow: string;
   accentSoft: string;
   ribbonBg: string;
   ribbonText: string;
@@ -41,7 +43,9 @@ export const PORTAL_THEMES: PortalTheme[] = [
     textSecondary: '#334155',
     textMuted: '#64748B',
     accent: '#134280',
-    accentHover: '#0D3162',
+    accentHover: '#1D4ED8',
+    accentGlow: '#3B82F6',
+    accentGlowShadow: 'rgba(37, 99, 235, 0.48)',
     accentSoft: 'rgba(19, 66, 128, 0.08)',
     ribbonBg: '#0F2D59',
     ribbonText: '#E2E8F0',
@@ -61,7 +65,9 @@ export const PORTAL_THEMES: PortalTheme[] = [
     textSecondary: '#2C4A3E',
     textMuted: '#587568',
     accent: '#065F46',
-    accentHover: '#064E3B',
+    accentHover: '#059669',
+    accentGlow: '#10B981',
+    accentGlowShadow: 'rgba(16, 185, 129, 0.46)',
     accentSoft: 'rgba(6, 95, 70, 0.08)',
     ribbonBg: '#064E3B',
     ribbonText: '#ECFDF5',
@@ -81,7 +87,9 @@ export const PORTAL_THEMES: PortalTheme[] = [
     textSecondary: '#44403C',
     textMuted: '#78716C',
     accent: '#9A3412',
-    accentHover: '#7C2D12',
+    accentHover: '#EA580C',
+    accentGlow: '#F97316',
+    accentGlowShadow: 'rgba(234, 88, 12, 0.46)',
     accentSoft: 'rgba(154, 52, 18, 0.08)',
     ribbonBg: '#431407',
     ribbonText: '#FFEDD5',
@@ -101,7 +109,9 @@ export const PORTAL_THEMES: PortalTheme[] = [
     textSecondary: '#CBD5E1',
     textMuted: '#94A3B8',
     accent: '#2563EB',
-    accentHover: '#1D4ED8',
+    accentHover: '#3B82F6',
+    accentGlow: '#60A5FA',
+    accentGlowShadow: 'rgba(96, 165, 250, 0.55)',
     accentSoft: 'rgba(56, 189, 248, 0.14)',
     ribbonBg: '#060A14',
     ribbonText: '#CBD5E1',
@@ -121,7 +131,9 @@ export const PORTAL_THEMES: PortalTheme[] = [
     textSecondary: '#3F3F46',
     textMuted: '#71717A',
     accent: '#1D4ED8',
-    accentHover: '#1E40AF',
+    accentHover: '#2563EB',
+    accentGlow: '#38BDF8',
+    accentGlowShadow: 'rgba(37, 99, 235, 0.45)',
     accentSoft: 'rgba(29, 78, 216, 0.08)',
     ribbonBg: '#18181B',
     ribbonText: '#F4F4F5',
@@ -141,7 +153,9 @@ export const PORTAL_THEMES: PortalTheme[] = [
     textSecondary: '#57534E',
     textMuted: '#78716C',
     accent: '#B45309',
-    accentHover: '#92400E',
+    accentHover: '#D97706',
+    accentGlow: '#F59E0B',
+    accentGlowShadow: 'rgba(245, 158, 11, 0.48)',
     accentSoft: 'rgba(180, 83, 9, 0.09)',
     ribbonBg: '#292524',
     ribbonText: '#FEF3C7',
