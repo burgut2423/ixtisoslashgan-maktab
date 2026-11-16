@@ -57,6 +57,7 @@ import {
   updateSheetRowById,
   uploadBlobToDrive,
 } from '../services/googleWorkspace';
+import { FIREBASE_AUTH_SETTINGS_URL } from '../services/firebaseAuth';
 import { GoogleSignInButton } from './GoogleSignInButton';
 import { ConfirmModal } from './ConfirmModal';
 import { MediaImage } from './MediaImage';
@@ -1109,8 +1110,49 @@ export function AdminDashboard({
 
         <div className="max-w-6xl space-y-6 p-6">
           {authError && (
-            <div className="rounded-md border border-red-200 bg-red-50 p-4 text-xs text-red-800">
-              Google kirish xatoligi: {authError}
+            <div className="rounded-md border border-red-200 bg-red-50 p-4 text-xs text-red-900">
+              <p className="font-semibold">
+                Google kirish xatoligi: {authError}
+              </p>
+              {authError.toLowerCase().includes('unauthorized-domain') && (
+                <div className="mt-2.5 flex flex-wrap items-center gap-2 border-t border-red-200 pt-2.5">
+                  <span className="text-red-800">
+                    Domen:{' '}
+                    <code className="rounded bg-white px-1.5 py-0.5 font-mono-tabular font-semibold text-red-950">
+                      {typeof window !== 'undefined'
+                        ? window.location.hostname
+                        : ''}
+                    </code>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (typeof window !== 'undefined') {
+                        navigator.clipboard?.writeText(
+                          window.location.hostname
+                        );
+                        setStatusMessage({
+                          type: 'success',
+                          text: `Domen nusxalandi: ${window.location.hostname}`,
+                        });
+                      }
+                    }}
+                    className="inline-flex items-center gap-1 rounded border border-red-300 bg-white px-2.5 py-1 font-medium text-red-800 hover:bg-red-100"
+                  >
+                    <Copy className="h-3 w-3" />
+                    Domenni nusxalash
+                  </button>
+                  <a
+                    href={FIREBASE_AUTH_SETTINGS_URL}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 rounded bg-red-800 px-2.5 py-1 font-medium text-white hover:bg-red-900"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    Firebase Authorized Domains’ni ochish
+                  </a>
+                </div>
+              )}
             </div>
           )}
 

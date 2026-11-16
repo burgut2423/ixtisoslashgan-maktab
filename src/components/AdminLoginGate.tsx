@@ -3,6 +3,9 @@ import type { FormEvent } from 'react';
 import type { User as FirebaseUser } from 'firebase/auth';
 import {
   ArrowLeft,
+  Check,
+  Copy,
+  ExternalLink,
   Eye,
   EyeOff,
   KeyRound,
@@ -11,7 +14,11 @@ import {
   ShieldCheck,
   User,
 } from 'lucide-react';
-import { googleSignIn, logout } from '../services/firebaseAuth';
+import {
+  FIREBASE_AUTH_SETTINGS_URL,
+  googleSignIn,
+  logout,
+} from '../services/firebaseAuth';
 import {
   fetchApiOrFallback,
   getStaticDataset,
@@ -37,6 +44,7 @@ export function AdminLoginGate({
   const [loading, setLoading] = useState(false);
   const [gmailLoading, setGmailLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copiedDomain, setCopiedDomain] = useState(false);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -237,7 +245,46 @@ export function AdminLoginGate({
 
             {error && (
               <div className="rounded-md border border-red-200 bg-red-50 px-3.5 py-2.5 text-xs font-medium text-red-800">
-                {error}
+                <p>{error}</p>
+                {error.toLowerCase().includes('unauthorized-domain') && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-red-200 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (typeof window !== 'undefined') {
+                          navigator.clipboard?.writeText(
+                            window.location.hostname
+                          );
+                          setCopiedDomain(true);
+                          setTimeout(() => setCopiedDomain(false), 2000);
+                        }
+                      }}
+                      className="inline-flex items-center gap-1 rounded border border-red-300 bg-white px-2 py-1 text-[11px] font-semibold text-red-800 hover:bg-red-100"
+                    >
+                      {copiedDomain ? (
+                        <Check className="h-3 w-3" />
+                      ) : (
+                        <Copy className="h-3 w-3" />
+                      )}
+                      {copiedDomain
+                        ? 'Nusxalandi'
+                        : `Nusxalash: ${
+                            typeof window !== 'undefined'
+                              ? window.location.hostname
+                              : ''
+                          }`}
+                    </button>
+                    <a
+                      href={FIREBASE_AUTH_SETTINGS_URL}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 rounded bg-red-800 px-2 py-1 text-[11px] font-semibold text-white hover:bg-red-900"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      Firebase Console
+                    </a>
+                  </div>
+                )}
               </div>
             )}
 

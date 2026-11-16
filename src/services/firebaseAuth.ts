@@ -55,39 +55,48 @@ provider.setCustomParameters({
 let isSigningIn = false;
 let cachedAccessToken: string | null = null;
 
+export const FIREBASE_AUTH_SETTINGS_URL = firebaseConfig.projectId
+  ? `https://console.firebase.google.com/project/${firebaseConfig.projectId}/authentication/settings`
+  : 'https://console.firebase.google.com/';
+
 function mapFirebaseAuthError(err: unknown): Error {
   const code =
     typeof err === 'object' && err !== null && 'code' in err
       ? String((err as { code?: unknown }).code || '')
       : '';
+  const msg = err instanceof Error ? err.message : String(err || '');
+  const combined = `${code} ${msg}`.toLowerCase();
   const host = typeof window !== 'undefined' ? window.location.hostname : '';
 
-  switch (code) {
-    case 'auth/unauthorized-domain':
-      return new Error(
-        `Ushbu domen (${host}) Firebase ruxsat etilgan domenlar ro‘yxatiga kiritilmagan. Firebase Console → Authentication → Settings → Authorized domains bo‘limiga "${host}" ni qo‘shing.`
-      );
-    case 'auth/popup-blocked':
-      return new Error(
-        'Brauzer Google kirish oynasini (popup) blokladi. Brauzer manzil satridan popup oynalarga ruxsat bering.'
-      );
-    case 'auth/popup-closed-by-user':
-      return new Error('Google kirish oynasi foydalanuvchi tomonidan yopildi.');
-    case 'auth/cancelled-popup-request':
-      return new Error('Kirish so‘rovi bekor qilindi. Qaytadan urinib ko‘ring.');
-    case 'auth/operation-not-allowed':
-      return new Error(
-        'Firebase loyihada Google Sign-In provayderi yoqilmagan. Firebase Console → Authentication → Sign-in method dan Google ni yoqing.'
-      );
-    case 'auth/network-request-failed':
-      return new Error(
-        'Tarmoq xatoligi: Google autentifikatsiya serveriga ulanib bo‘lmadi.'
-      );
-    default:
-      return err instanceof Error
-        ? err
-        : new Error('Google orqali kirishda kutilmagan xatolik yuz berdi');
+  if (combined.includes('unauthorized-domain')) {
+    return new Error(
+      `Ushbu domen (${host}) Firebase ruxsat etilgan domenlar ro‘yxatiga kiritilmagan (auth/unauthorized-domain). Firebase Console → Authentication → Settings → Authorized domains bo‘limiga "${host}" ni qo‘shing.`
+    );
   }
+  if (combined.includes('popup-blocked')) {
+    return new Error(
+      'Brauzer Google kirish oynasini (popup) blokladi. Brauzer manzil satridan popup oynalarga ruxsat bering.'
+    );
+  }
+  if (combined.includes('popup-closed-by-user')) {
+    return new Error('Google kirish oynasi foydalanuvchi tomonidan yopildi.');
+  }
+  if (combined.includes('cancelled-popup-request')) {
+    return new Error('Kirish so‘rovi bekor qilindi. Qaytadan urinib ko‘ring.');
+  }
+  if (combined.includes('operation-not-allowed')) {
+    return new Error(
+      'Firebase loyihada Google Sign-In provayderi yoqilmagan. Firebase Console → Authentication → Sign-in method dan Google ni yoqing.'
+    );
+  }
+  if (combined.includes('network-request-failed')) {
+    return new Error(
+      'Tarmoq xatoligi: Google autentifikatsiya serveriga ulanib bo‘lmadi.'
+    );
+  }
+  return err instanceof Error
+    ? err
+    : new Error('Google orqali kirishda kutilmagan xatolik yuz berdi');
 }
 
 export const initAuth = (
