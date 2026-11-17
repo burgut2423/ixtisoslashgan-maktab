@@ -1690,6 +1690,7 @@ export function AdminDashboard({
                           src={member.imageUrl}
                           alt={member.fullName}
                           className="h-full w-full object-cover object-top"
+                          smartPortrait
                         />
                       </div>
                       <p className="mt-3 text-xs font-medium text-[#134280]">
@@ -1879,7 +1880,7 @@ export function AdminDashboard({
                     className="flex flex-col overflow-hidden rounded-lg border border-slate-200 bg-white"
                   >
                     <div className="aspect-[4/3] w-full overflow-hidden bg-slate-100">
-                      <MediaImage src={item.url} alt={item.title} />
+                      <MediaImage src={item.url} alt={item.title} smartPortrait />
                     </div>
                     <div className="flex flex-1 flex-col justify-between p-4">
                       <div>
@@ -3157,6 +3158,7 @@ export function AdminDashboard({
                         src={editingLeader.imageUrl}
                         alt={editingLeader.fullName || 'Portret'}
                         className="h-full w-full object-cover object-top"
+                        smartPortrait
                       />
                     </div>
                   )}

@@ -18,8 +18,10 @@ import {
   Languages,
   Mail,
   MapPin,
+  Maximize2,
   Menu,
   MessageSquare,
+  Minimize2,
   Newspaper,
   Palette,
   Phone,
@@ -32,7 +34,6 @@ import {
   ZoomIn,
 } from 'lucide-react';
 import type {
-  MediaAsset,
   NewsItem,
   SiteConfig,
   SiteDataset,
@@ -87,11 +88,11 @@ export function PublicPortal({
   const [newsPage, setNewsPage] = useState(1);
   const [activeArticle, setActiveArticle] = useState<NewsItem | null>(null);
   const [docCategory, setDocCategory] = useState<string>('Barchasi');
-  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [customLightbox, setCustomLightbox] = useState<{
     url: string;
     title: string;
     subtitle?: string;
+    isPortrait?: boolean;
   } | null>(null);
   const [articleLightbox, setArticleLightbox] = useState<{
     images: string[];
@@ -99,6 +100,7 @@ export function PublicPortal({
     title: string;
     subtitle?: string;
   } | null>(null);
+  const [lightboxFitMode, setLightboxFitMode] = useState<'fill' | 'fit'>('fill');
   const [scrollProgress, setScrollProgress] = useState(0);
 
   // Appeal form state
@@ -199,12 +201,6 @@ export function PublicPortal({
     return list;
   }, [dataset?.leadership]);
 
-  const mediaList: MediaAsset[] = dataset?.media || [];
-  const activeLightboxMedia =
-    lightboxIndex !== null && mediaList[lightboxIndex]
-      ? mediaList[lightboxIndex]
-      : null;
-
   // Keyboard navigation for modals
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -213,8 +209,7 @@ export function PublicPortal({
           setArticleLightbox(null);
           return;
         }
-        if (lightboxIndex !== null || customLightbox) {
-          setLightboxIndex(null);
+        if (customLightbox) {
           setCustomLightbox(null);
           return;
         }
@@ -238,23 +233,11 @@ export function PublicPortal({
               : null
           );
         }
-      } else if (lightboxIndex !== null && mediaList.length > 0) {
-        if (e.key === 'ArrowRight') {
-          setLightboxIndex((prev) =>
-            prev === null ? 0 : (prev + 1) % mediaList.length
-          );
-        } else if (e.key === 'ArrowLeft') {
-          setLightboxIndex((prev) =>
-            prev === null
-              ? 0
-              : (prev - 1 + mediaList.length) % mediaList.length
-          );
-        }
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [articleLightbox, customLightbox, lightboxIndex, mediaList.length]);
+  }, [articleLightbox, customLightbox]);
 
   // Smooth slim top progress bar tracking scroll depth
   useEffect(() => {
@@ -743,7 +726,7 @@ export function PublicPortal({
                           subtitle: 'Bosh o‘quv binosi',
                         })
                       }
-                      className="group relative h-72 w-full overflow-hidden rounded-lg border text-left lg:h-full lg:min-h-[340px]"
+                      className="group relative block h-72 w-full overflow-hidden rounded-lg border text-left lg:h-full lg:min-h-[340px]"
                       style={{
                         borderColor: theme.borderSubtle,
                         backgroundColor: theme.bgSurfaceAlt,
@@ -1080,6 +1063,7 @@ export function PublicPortal({
                             alt={tr(leadStory.title)}
                             className="w3-img-hover h-full w-full object-cover"
                             fallbackTitle={tr(leadStory.title)}
+                            smartPortrait
                           />
                           {parseMediaUrls(leadStory.imageUrl).length > 1 && (
                             <span className="pointer-events-none absolute left-3 bottom-3 inline-flex items-center gap-1.5 rounded bg-black/70 px-2.5 py-1 text-[11px] font-medium text-white">
@@ -1161,6 +1145,7 @@ export function PublicPortal({
                               alt={tr(item.title)}
                               className="w3-img-hover h-full w-full object-cover"
                               fallbackTitle={tr(item.title)}
+                              smartPortrait
                             />
                             {parseMediaUrls(item.imageUrl).length > 1 && (
                               <span className="pointer-events-none absolute left-3 bottom-3 inline-flex items-center gap-1 rounded bg-black/70 px-2 py-0.5 text-[11px] font-medium text-white">
@@ -1460,9 +1445,10 @@ export function PublicPortal({
                               url: member.imageUrl,
                               title: member.fullName,
                               subtitle: member.role,
+                              isPortrait: true,
                             })
                           }
-                          className="relative aspect-[4/3] w-full overflow-hidden text-left"
+                          className="relative block aspect-[4/3] w-full shrink-0 overflow-hidden text-left"
                           style={{ backgroundColor: theme.bgSurfaceAlt }}
                         >
                           <MediaImage
@@ -1470,6 +1456,7 @@ export function PublicPortal({
                             alt={tr(member.fullName)}
                             className="w3-img-hover h-full w-full object-cover object-top"
                             fallbackTitle={tr(member.fullName)}
+                            smartPortrait
                           />
                           <span className="pointer-events-none absolute right-3 bottom-3 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity duration-300 group-hover:opacity-100">
                             <ZoomIn className="h-4 w-4" />
@@ -1690,83 +1677,10 @@ export function PublicPortal({
               </div>
             </section>
 
-            {/* Media Galereya (W3 Hover Zoom + Lightbox Slider) */}
-            {mediaList.length > 0 && (
-              <section className="mx-auto max-w-[1280px] px-6 py-14">
-                <div>
-                  <p
-                    className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest"
-                    style={{ color: theme.isDark ? '#60A5FA' : theme.accent }}
-                  >
-                    <Images className="h-3.5 w-3.5" />
-                    {tr('Media Arxiv')}
-                  </p>
-                  <h2 className="mt-1 font-serif-editorial text-2xl font-bold lg:text-3xl">
-                    {tr('Maktab hayotidan fotolavhalar')}
-                  </h2>
-                </div>
-
-                <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-                  {mediaList.map((item, idx) => (
-                    <RevealOnScroll
-                      key={item.id}
-                      delayMs={Math.min(idx * 65, 260)}
-                      className="flex"
-                    >
-                      <button
-                        type="button"
-                        onClick={() => setLightboxIndex(idx)}
-                        className="w3-card-elevate group flex w-full flex-col overflow-hidden rounded-lg border text-left"
-                        style={{
-                          backgroundColor: theme.bgSurface,
-                          borderColor: theme.borderSubtle,
-                        }}
-                      >
-                        <div
-                          className="relative aspect-[4/3] w-full overflow-hidden"
-                          style={{ backgroundColor: theme.bgSurfaceAlt }}
-                        >
-                          <MediaImage
-                            src={item.url}
-                            alt={tr(item.title)}
-                            className="w3-img-hover h-full w-full object-cover"
-                            fallbackTitle={tr(item.title)}
-                          />
-                          <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/35 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-                            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/95 text-slate-900 shadow-lg transition-transform duration-300 group-hover:scale-110">
-                              <ZoomIn className="h-5 w-5" />
-                            </span>
-                          </div>
-                        </div>
-                        <div className="p-3.5">
-                          <p
-                            className="text-xs"
-                            style={{ color: theme.textMuted }}
-                          >
-                            {tr(item.category)} ·{' '}
-                            <span className="font-mono-tabular">
-                              {item.createdAt}
-                            </span>
-                          </p>
-                          <p className="mt-1 text-sm font-medium line-clamp-1">
-                            {tr(item.title)}
-                          </p>
-                        </div>
-                      </button>
-                    </RevealOnScroll>
-                  ))}
-                </div>
-              </section>
-            )}
-
             {/* Bog'lanish va Elektron Murojaat */}
             <section
               id="boglanish"
-              className="border-t py-14 transition-colors duration-300"
-              style={{
-                backgroundColor: theme.bgSurface,
-                borderColor: theme.borderSubtle,
-              }}
+              className="py-14 transition-colors duration-300"
             >
               <div className="mx-auto max-w-[1280px] px-6">
                 <div className="grid gap-10 lg:grid-cols-12">
@@ -2130,6 +2044,7 @@ export function PublicPortal({
                         src={articleImages[0]}
                         alt={tr(activeArticle.title)}
                         className="w3-img-hover h-full w-full object-cover"
+                        smartPortrait
                       />
                       <span className="pointer-events-none absolute right-3 bottom-3 inline-flex items-center gap-1.5 rounded-md bg-black/70 px-2.5 py-1 text-xs font-medium text-white opacity-90 transition-opacity group-hover:opacity-100">
                         <ZoomIn className="h-3.5 w-3.5" />
@@ -2173,6 +2088,7 @@ export function PublicPortal({
                                 src={imgUrl}
                                 alt={`${tr(activeArticle.title)} — ${idx + 1}`}
                                 className="w3-img-hover h-full w-full object-cover"
+                                smartPortrait
                               />
                               <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/30">
                                 <ZoomIn className="h-5 w-5 text-white opacity-0 transition-opacity group-hover:opacity-100" />
@@ -2200,12 +2116,11 @@ export function PublicPortal({
         </div>
       )}
 
-      {/* Gallery Image Lightbox Modal (W3 Zoom + Prev/Next Slider) */}
-      {(activeLightboxMedia || customLightbox || articleLightbox) && (
+      {/* Image Lightbox Modal (Hero, Leadership & News Gallery Slider) */}
+      {(customLightbox || articleLightbox) && (
         <div
           className="w3-animate-opacity fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/90 p-4 backdrop-blur-[2px]"
           onClick={() => {
-            setLightboxIndex(null);
             setCustomLightbox(null);
             setArticleLightbox(null);
           }}
@@ -2227,53 +2142,76 @@ export function PublicPortal({
             >
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold">
-                  {tr(
-                    articleLightbox?.title ||
-                      activeLightboxMedia?.title ||
-                      customLightbox?.title ||
-                      ''
-                  )}
+                  {tr(articleLightbox?.title || customLightbox?.title || '')}
                 </p>
                 <p className="text-xs" style={{ color: theme.textMuted }}>
                   {articleLightbox
                     ? `${tr(articleLightbox.subtitle || '')} · ${
                         articleLightbox.index + 1
                       } / ${articleLightbox.images.length}`
-                    : activeLightboxMedia
-                      ? `${tr(activeLightboxMedia.category)} · ${
-                          activeLightboxMedia.createdAt
-                        }`
-                      : tr(customLightbox?.subtitle || '')}
+                    : tr(customLightbox?.subtitle || '')}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setLightboxIndex(null);
-                  setCustomLightbox(null);
-                  setArticleLightbox(null);
-                }}
-                className="shrink-0 rounded p-1.5 hover:bg-black/5"
-                aria-label="Yopish"
-              >
-                <X className="h-5 w-5" />
-              </button>
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setLightboxFitMode((prev) =>
+                      prev === 'fill' ? 'fit' : 'fill'
+                    )
+                  }
+                  className="inline-flex items-center gap-1.5 rounded border px-2.5 py-1 text-xs font-medium hover:bg-black/5"
+                  style={{ borderColor: theme.borderSubtle }}
+                  title={
+                    lightboxFitMode === 'fill'
+                      ? tr('Asl o‘lchamda ko‘rish')
+                      : tr('Ekranni to‘ldirish (Fill)')
+                  }
+                >
+                  {lightboxFitMode === 'fill' ? (
+                    <>
+                      <Minimize2 className="h-3.5 w-3.5" />
+                      <span>{tr('Fill')}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Maximize2 className="h-3.5 w-3.5" />
+                      <span>{tr('Fit')}</span>
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCustomLightbox(null);
+                    setArticleLightbox(null);
+                  }}
+                  className="shrink-0 rounded p-1.5 hover:bg-black/5"
+                  aria-label="Yopish"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
             </div>
 
-            <div className="relative flex max-h-[72vh] min-h-[300px] items-center justify-center overflow-hidden bg-slate-950">
+            <div className="relative h-[62vh] w-full overflow-hidden bg-slate-950 sm:h-[72vh]">
               <MediaImage
                 src={
                   articleLightbox
                     ? articleLightbox.images[articleLightbox.index]
-                    : activeLightboxMedia?.url || customLightbox?.url
+                    : customLightbox?.url
                 }
-                alt={tr(
-                  articleLightbox?.title ||
-                    activeLightboxMedia?.title ||
-                    customLightbox?.title ||
-                    ''
-                )}
-                className="mx-auto max-h-[72vh] w-auto object-contain"
+                alt={tr(articleLightbox?.title || customLightbox?.title || '')}
+                smartPortrait={lightboxFitMode === 'fill'}
+                className={
+                  lightboxFitMode === 'fill'
+                    ? `h-full w-full object-cover ${
+                        customLightbox?.isPortrait
+                          ? 'object-top'
+                          : 'object-center'
+                      }`
+                    : 'h-full w-full object-contain'
+                }
               />
 
               {articleLightbox && articleLightbox.images.length > 1 && (
@@ -2307,37 +2245,6 @@ export function PublicPortal({
                               index: (prev.index + 1) % prev.images.length,
                             }
                           : null
-                      )
-                    }
-                    className="btn-glow-ribbon absolute right-3 top-1/2 -translate-y-1/2 rounded-full border border-white/25 bg-black/60 p-2.5 text-white"
-                    aria-label="Keyingi rasm"
-                  >
-                    <ChevronRight className="h-5 w-5" />
-                  </button>
-                </>
-              )}
-
-              {!articleLightbox && activeLightboxMedia && mediaList.length > 1 && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setLightboxIndex((prev) =>
-                        prev === null
-                          ? 0
-                          : (prev - 1 + mediaList.length) % mediaList.length
-                      )
-                    }
-                    className="btn-glow-ribbon absolute left-3 top-1/2 -translate-y-1/2 rounded-full border border-white/25 bg-black/60 p-2.5 text-white"
-                    aria-label="Oldingi rasm"
-                  >
-                    <ChevronLeft className="h-5 w-5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setLightboxIndex((prev) =>
-                        prev === null ? 0 : (prev + 1) % mediaList.length
                       )
                     }
                     className="btn-glow-ribbon absolute right-3 top-1/2 -translate-y-1/2 rounded-full border border-white/25 bg-black/60 p-2.5 text-white"
