@@ -900,6 +900,46 @@ async function createApp() {
     res.json({ ok: true });
   });
 
+function getCliArgValue(flag: string): string | undefined {
+  const args = process.argv.slice(2);
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (arg === flag && args[i + 1]) {
+      return args[i + 1];
+    }
+    if (arg.startsWith(`${flag}=`)) {
+      return arg.slice(flag.length + 1);
+    }
+  }
+  return undefined;
+}
+
+function resolveServerPort(isProd: boolean): number {
+  const cliPort = Number(getCliArgValue('--port'));
+  if (Number.isFinite(cliPort) && cliPort > 0) {
+    return cliPort;
+  }
+
+  const envPort = Number(process.env.PORT);
+  const nginxPort = Number(process.env.NGINX_PORT);
+  const controlPlanePort = Number(process.env.CONTROL_PLANE_PORT);
+  const defaultAppPort = Number(process.env.DEFAULT_APP_PORT) || 3000;
+
+  if (!isProd) {
+    if (
+      Number.isFinite(envPort) &&
+      envPort > 0 &&
+      envPort !== nginxPort &&
+      envPort !== controlPlanePort
+    ) {
+      return envPort;
+    }
+    return defaultAppPort;
+  }
+
+  return Number.isFinite(envPort) && envPort > 0 ? envPort : defaultAppPort;
+}
+
   // Vite Dev Middleware or Static Production Build
   const isProd =
     process.env.NODE_ENV === 'production' ||
@@ -947,7 +987,12 @@ export class ErrorOverlay extends HTMLElement {}
 
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
-      server: { middlewareMode: true, hmr: false, ws: false },
+      server: {
+        middlewareMode: true,
+        hmr: false,
+        ws: false,
+        watch: process.env.DISABLE_HMR === 'true' ? null : undefined,
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);
@@ -959,10 +1004,14 @@ export class ErrorOverlay extends HTMLElement {}
     });
   }
 
-  const PORT = Number(process.env.PORT || 3000);
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on http://0.0.0.0:${PORT}`);
+  const PORT = resolveServerPort(isProd);
+  const HOST = getCliArgValue('--host') || '0.0.0.0';
+  app.listen(PORT, HOST, () => {
+    console.log(`Server running on http://${HOST}:${PORT}`);
   });
 }
 
-createApp();
+createApp().catch((err) => {
+  console.error('Failed to start server:', err);
+  process.exit(1);
+});
